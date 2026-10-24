@@ -1,0 +1,123 @@
+/**
+ * Loạn 12 Sứ Quân — Danh mục Binh Khí & Giáp Trụ Cửa Hàng
+ */
+
+import { Item } from '../types/game';
+
+export const SHOP_ITEMS: Item[] = [
+  // VŨ KHÍ
+  {
+    id: 'weapon_iron_dagger',
+    name: 'Đoản Kiếm Sắt',
+    type: 'WEAPON',
+    cost: 150,
+    bonusAtk: 6,
+    bonusDef: 0,
+    bonusHp: 20,
+    description: 'Thanh kiếm thép cơ bản của lính nghĩa binh Hoa Lư.',
+    iconName: 'sword',
+  },
+  {
+    id: 'weapon_hoa_lu_blade',
+    name: 'Hoa Lư Đao',
+    type: 'WEAPON',
+    cost: 380,
+    bonusAtk: 14,
+    bonusDef: 2,
+    bonusHp: 50,
+    description: 'Đao thép rèn từ quặng núi đá Ninh Bình, lưỡi bén chém sắt như chém bùn.',
+    iconName: 'sword',
+  },
+  {
+    id: 'weapon_bat_xa_mau',
+    name: 'Bát Xà Mâu',
+    type: 'WEAPON',
+    cost: 750,
+    bonusAtk: 24,
+    bonusDef: 4,
+    bonusHp: 100,
+    description: 'Ngọn giáo uốn lượn như rắn thần, tăng mạnh sát thương đòn đánh bạo kích.',
+    iconName: 'spear',
+  },
+  {
+    id: 'weapon_long_uy_sword',
+    name: 'Long Uy Bửu Kiếm',
+    type: 'WEAPON',
+    cost: 1500,
+    bonusAtk: 40,
+    bonusDef: 8,
+    bonusHp: 200,
+    description: 'Bảo kiếm thần khí khắc họa tiết rồng thời Đinh, uy chấn thiên hạ.',
+    iconName: 'sparkles',
+  },
+
+  // ÁO GIÁP
+  {
+    id: 'armor_leather',
+    name: 'Giáp Da Trâu',
+    type: 'ARMOR',
+    cost: 180,
+    bonusAtk: 0,
+    bonusDef: 8,
+    bonusHp: 80,
+    description: 'Áo giáp thuộc da dày dặn, giảm bớt sát thương đao kiếm thông thường.',
+    iconName: 'shield',
+  },
+  {
+    id: 'armor_dong_son_bronze',
+    name: 'Giáp Đồng Đông Sơn',
+    type: 'ARMOR',
+    cost: 550,
+    bonusAtk: 2,
+    bonusDef: 18,
+    bonusHp: 180,
+    description: 'Tấm giáp ngực bằng đồng đúc hoa văn chim Lạc cổ truyền, phòng thủ kiên cố.',
+    iconName: 'shield',
+  },
+  {
+    id: 'armor_hac_ho',
+    name: 'Hắc Hổ Thiết Giáp',
+    type: 'ARMOR',
+    cost: 1100,
+    bonusAtk: 5,
+    bonusDef: 30,
+    bonusHp: 320,
+    description: 'Áo giáp sắt tôi luyện than đá đen nhánh, uy nghiêm như mãnh hổ rình mồi.',
+    iconName: 'shield',
+  },
+  {
+    id: 'armor_long_lan',
+    name: 'Long Lân Hoàng Bào',
+    type: 'ARMOR',
+    cost: 2200,
+    bonusAtk: 12,
+    bonusDef: 45,
+    bonusHp: 500,
+    description: 'Hoàng bào vảy rồng quý giá bậc nhất thế gian dành cho bậc Vạn Thắng Vương.',
+    iconName: 'crown',
+  },
+
+  // DIỆU DƯỢC
+  {
+    id: 'elixir_hp',
+    name: 'Bình Huyết Đan',
+    type: 'ELIXIR',
+    cost: 120,
+    bonusAtk: 0,
+    bonusDef: 0,
+    bonusHp: 150,
+    description: 'Tăng vĩnh viễn 150 điểm sinh lực tối đa cho dũng tướng.',
+    iconName: 'heart',
+  },
+  {
+    id: 'elixir_luc',
+    name: 'Khí Lực Đan',
+    type: 'ELIXIR',
+    cost: 250,
+    bonusAtk: 8,
+    bonusDef: 4,
+    bonusHp: 60,
+    description: 'Luyện khí ích tinh, tăng vĩnh viễn 8 điểm công và 4 điểm phòng thủ.',
+    iconName: 'zap',
+  },
+];

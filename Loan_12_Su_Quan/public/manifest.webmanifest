@@ -1,0 +1,32 @@
+{
+  "name": "Loạn 12 Sứ Quân — Mobile Remaster",
+  "short_name": "12 Sứ Quân",
+  "description": "Game nhập vai Puzzle RPG Đinh Bộ Lĩnh dẹp loạn 12 sứ quân",
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#23150b",
+  "theme_color": "#23150b",
+  "icons": [
+    {
+      "src": "/assets/aistudio/image_53c4514a.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/aistudio/image_53c4514a.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/aistudio/image_53c4514a.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
