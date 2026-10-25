@@ -1,6 +1,0 @@
-{
-  "name": "Loạn 12 Sứ Quân — Mobile Remaster",
-  "description": "Game nhập vai Puzzle RPG kinh điển thời Java/Ola được tái tạo hoàn hảo với chiến trường 2D, bàn cờ Match-3, đối kháng 2 người và hỗ trợ chơi offline.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
