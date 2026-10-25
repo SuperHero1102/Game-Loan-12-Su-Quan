@@ -2,12 +2,13 @@
  * Loạn 12 Sứ Quân — Battle Screen Orchestrator
  * Điều phối trận đấu Match-3, hoạt cảnh 3D Tướng & Thú Cưỡi, 3 thanh chỉ số,
  * cơ chế Tốc Độ (SPD) quyết định lượt 1, Nội Tại Vai Trò (Role Passives),
- * và đồng hồ đếm ngược thời gian mỗi lượt.
+ * đồng bộ 2 máy thời gian thực (Seeded P2P), chống văng trận (Safe Timer Lifecycle),
+ * và phân tầng độ khó AI chuẩn xác.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import { Tile, FighterState, FloatingText, GameMode, Warlord } from '../../types/game';
+import { Tile, FighterState, FloatingText, GameMode, Warlord, PveDifficulty } from '../../types/game';
 import {
   createInitialBoard,
   testSwapCreatesMatch,
@@ -20,10 +21,10 @@ import {
 import { BattleStage2D } from './BattleStage2D';
 import { Match3Board } from './Match3Board';
 import { SkillButtons } from './SkillButtons';
-import { VirtualDpad } from './VirtualDpad';
 import { TurnTimerModal } from '../common/TurnTimerModal';
 import { soundEngine } from '../../services/audio';
 import { p2pService } from '../../services/p2p';
+import { deviceOptimizer } from '../../services/deviceOptimizer';
 import { ArrowLeft, Volume2, VolumeX, FastForward, Clock } from 'lucide-react';
 
 interface BattleScreenProps {
@@ -31,6 +32,9 @@ interface BattleScreenProps {
   p1Warlord: Warlord;
   p2Warlord: Warlord;
   stageNumber?: number;
+  pveDifficulty?: PveDifficulty;
+  p2pBoardSeed?: number;
+  p2pIsHost?: boolean;
   playerLevel: number;
   bonusAtk: number;
   bonusDef: number;
@@ -52,6 +56,9 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
   p1Warlord,
   p2Warlord,
   stageNumber,
+  pveDifficulty = 'MEDIUM',
+  p2pBoardSeed,
+  p2pIsHost = true,
   bonusAtk,
   bonusDef,
   bonusHp,
@@ -65,77 +72,180 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
   turnTimeLimit = 20,
   onUpdateTurnTimer,
 }) => {
+  // Quản lý vòng đời component & bộ đếm giờ an toàn để chống văng màn chơi
+  const mountedRef = useRef<boolean>(true);
+  const activeTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+  const safeTimeout = useCallback((fn: () => void, delayMs: number) => {
+    const id = setTimeout(() => {
+      activeTimersRef.current.delete(id);
+      if (mountedRef.current) {
+        fn();
+      }
+    }, delayMs);
+    activeTimersRef.current.add(id);
+    return id;
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      activeTimersRef.current.forEach((id) => clearTimeout(id));
+      activeTimersRef.current.clear();
+    };
+  }, []);
+
+  // Tính toán hệ số độ khó thực tế cho AI (Campaign Ải 1->12 hoặc PvE Custom)
+  const getDifficultyTuning = useCallback(() => {
+    if (gameMode === 'PVE_CUSTOM') {
+      switch (pveDifficulty) {
+        case 'EASY':
+          return { aggressiveness: 0.32, skillChance: 0.38, dmgMultiplier: 0.82, statScale: 1.0 };
+        case 'MEDIUM':
+          return { aggressiveness: 0.60, skillChance: 0.75, dmgMultiplier: 1.0, statScale: 1.0 };
+        case 'HARD':
+          return { aggressiveness: 0.84, skillChance: 1.0, dmgMultiplier: 1.12, statScale: 1.0 };
+        case 'HELL':
+          return { aggressiveness: 0.98, skillChance: 1.0, dmgMultiplier: 1.25, statScale: 1.0 };
+      }
+    }
+    if (gameMode === 'CAMPAIGN') {
+      const stage = Math.max(1, Math.min(12, stageNumber || p2Warlord.stageNumber || 1));
+      const progress = (stage - 1) / 11; // 0.0 ở Ải 1 -> 1.0 ở Ải 12
+      return {
+        aggressiveness: Number((0.35 + progress * 0.60).toFixed(2)),
+        skillChance: stage <= 2 ? 0.45 : stage <= 5 ? 0.72 : 1.0,
+        dmgMultiplier: Number((0.85 + progress * 0.32).toFixed(2)),
+        statScale: Number((0.90 + progress * 0.25).toFixed(2)),
+      };
+    }
+    return { aggressiveness: 0.7, skillChance: 1.0, dmgMultiplier: 1.0, statScale: 1.0 };
+  }, [gameMode, pveDifficulty, stageNumber, p2Warlord.stageNumber]);
+
+  const diffTuning = getDifficultyTuning();
+
   // Initialize Fighters with 3 Authentic Bars + 3D Mount/Weapon/Role/SPD attributes
-  const [player1, setPlayer1] = useState<FighterState>(() => ({
-    id: p1Warlord.id,
-    name: p1Warlord.name,
-    title: p1Warlord.title,
-    avatarEmoji: p1Warlord.avatarEmoji,
-    avatarColor: p1Warlord.avatarColor,
-    characterVisual: p1Warlord.characterVisual,
-    hp: p1Warlord.baseHp + bonusHp,
-    maxHp: p1Warlord.baseHp + bonusHp,
-    armor: p1Warlord.baseArmor + bonusArmor, // Giáp Xanh Lá
-    maxArmor: 160,
-    mana: p1Warlord.id === 'ngo_nhat_khanh' ? 35 : 20, // Ngô Nhật Khánh nội tại khởi đầu +Mana
-    maxMana: p1Warlord.skillCost,
-    atk: p1Warlord.baseAtk + bonusAtk,
-    def: p1Warlord.baseDef + bonusDef,
-    spd: p1Warlord.spd,
-    role: p1Warlord.role,
-    mountName: p1Warlord.mountName,
-    weaponName: p1Warlord.weaponName,
-    weaponVisual: p1Warlord.weaponVisual,
-    passiveName: p1Warlord.passiveName,
-    passiveDescription: p1Warlord.passiveDescription,
-    portrait3D: p1Warlord.portrait3D,
-    skillName: p1Warlord.skillName,
-    skillDescription: p1Warlord.skillDescription,
-    skillCost: p1Warlord.skillCost,
-    isPlayer: true,
-    status: 'idle',
-    goldEarnedThisMatch: 0,
-  }));
+  const [player1, setPlayer1] = useState<FighterState>(() => {
+    const isP2P = gameMode === 'PVP_P2P';
+    const effHp = p1Warlord.baseHp + (isP2P ? 0 : bonusHp);
+    const effArmor = p1Warlord.baseArmor + (isP2P ? 0 : bonusArmor);
+    const effAtk = p1Warlord.baseAtk + (isP2P ? 0 : bonusAtk);
+    const effDef = p1Warlord.baseDef + (isP2P ? 0 : bonusDef);
 
-  const [player2, setPlayer2] = useState<FighterState>(() => ({
-    id: p2Warlord.id,
-    name: p2Warlord.name,
-    title: p2Warlord.title,
-    avatarEmoji: p2Warlord.avatarEmoji,
-    avatarColor: p2Warlord.avatarColor,
-    characterVisual: p2Warlord.characterVisual,
-    hp: p2Warlord.baseHp,
-    maxHp: p2Warlord.baseHp,
-    armor: p2Warlord.baseArmor, // Giáp Xanh Lá
-    maxArmor: 160,
-    mana: p2Warlord.id === 'ngo_nhat_khanh' ? 35 : 15,
-    maxMana: p2Warlord.skillCost,
-    atk: p2Warlord.baseAtk,
-    def: p2Warlord.baseDef,
-    spd: p2Warlord.spd,
-    role: p2Warlord.role,
-    mountName: p2Warlord.mountName,
-    weaponName: p2Warlord.weaponName,
-    weaponVisual: p2Warlord.weaponVisual,
-    passiveName: p2Warlord.passiveName,
-    passiveDescription: p2Warlord.passiveDescription,
-    portrait3D: p2Warlord.portrait3D,
-    skillName: p2Warlord.skillName,
-    skillDescription: p2Warlord.skillDescription,
-    skillCost: p2Warlord.skillCost,
-    isPlayer: gameMode !== 'CAMPAIGN' && gameMode !== 'PVE_CUSTOM',
-    status: 'idle',
-    goldEarnedThisMatch: 0,
-  }));
+    return {
+      id: p1Warlord.id,
+      name: p1Warlord.name,
+      title: p1Warlord.title,
+      avatarEmoji: p1Warlord.avatarEmoji,
+      avatarColor: p1Warlord.avatarColor,
+      characterVisual: p1Warlord.characterVisual,
+      hp: effHp,
+      maxHp: effHp,
+      armor: effArmor,
+      maxArmor: 160,
+      mana: p1Warlord.id === 'ngo_nhat_khanh' ? 35 : 20,
+      maxMana: p1Warlord.skillCost,
+      atk: effAtk,
+      def: effDef,
+      spd: p1Warlord.spd,
+      role: p1Warlord.role,
+      mountName: p1Warlord.mountName,
+      weaponName: p1Warlord.weaponName,
+      weaponVisual: p1Warlord.weaponVisual,
+      passiveName: p1Warlord.passiveName,
+      passiveDescription: p1Warlord.passiveDescription,
+      portrait3D: p1Warlord.portrait3D,
+      skillName: p1Warlord.skillName,
+      skillDescription: p1Warlord.skillDescription,
+      skillCost: p1Warlord.skillCost,
+      isPlayer: true,
+      status: 'idle',
+      goldEarnedThisMatch: 0,
+    };
+  });
 
-  const [board, setBoard] = useState<Tile[][]>(() => createInitialBoard());
+  const [player2, setPlayer2] = useState<FighterState>(() => {
+    const scaledHp =
+      gameMode === 'CAMPAIGN'
+        ? Math.round(p2Warlord.baseHp * diffTuning.statScale)
+        : p2Warlord.baseHp;
+    const scaledAtk =
+      gameMode === 'CAMPAIGN'
+        ? Math.round(p2Warlord.baseAtk * diffTuning.statScale)
+        : p2Warlord.baseAtk;
+    const scaledArmor =
+      gameMode === 'CAMPAIGN'
+        ? Math.round(p2Warlord.baseArmor * diffTuning.statScale)
+        : p2Warlord.baseArmor;
+
+    return {
+      id: p2Warlord.id,
+      name: p2Warlord.name,
+      title: p2Warlord.title,
+      avatarEmoji: p2Warlord.avatarEmoji,
+      avatarColor: p2Warlord.avatarColor,
+      characterVisual: p2Warlord.characterVisual,
+      hp: scaledHp,
+      maxHp: scaledHp,
+      armor: scaledArmor,
+      maxArmor: 160,
+      mana: p2Warlord.id === 'ngo_nhat_khanh' ? 35 : 15,
+      maxMana: p2Warlord.skillCost,
+      atk: scaledAtk,
+      def: p2Warlord.baseDef,
+      spd: p2Warlord.spd,
+      role: p2Warlord.role,
+      mountName: p2Warlord.mountName,
+      weaponName: p2Warlord.weaponName,
+      weaponVisual: p2Warlord.weaponVisual,
+      passiveName: p2Warlord.passiveName,
+      passiveDescription: p2Warlord.passiveDescription,
+      portrait3D: p2Warlord.portrait3D,
+      skillName: p2Warlord.skillName,
+      skillDescription: p2Warlord.skillDescription,
+      skillCost: p2Warlord.skillCost,
+      isPlayer: gameMode !== 'CAMPAIGN' && gameMode !== 'PVE_CUSTOM',
+      status: 'idle',
+      goldEarnedThisMatch: 0,
+    };
+  });
+
+  const player1Ref = useRef<FighterState>(player1);
+  const player2Ref = useRef<FighterState>(player2);
+  useEffect(() => {
+    player1Ref.current = player1;
+  }, [player1]);
+  useEffect(() => {
+    player2Ref.current = player2;
+  }, [player2]);
+
+  const [board, setBoard] = useState<Tile[][]>(() =>
+    createInitialBoard(
+      gameMode === 'PVP_P2P' ? p2pBoardSeed || p2pService.initialBoardSeed : undefined
+    )
+  );
+  const boardRef = useRef<Tile[][]>(board);
+  useEffect(() => {
+    boardRef.current = board;
+  }, [board]);
+
   const [selectedCoord, setSelectedCoord] = useState<{ r: number; c: number } | null>(null);
   // TỐC ĐỘ (SPD) QUYẾT ĐỊNH AI ĐÁNH TRƯỚC Ở LƯỢT 1!
   const [currentTurn, setCurrentTurn] = useState<'p1' | 'p2'>(() =>
     p1Warlord.spd >= p2Warlord.spd ? 'p1' : 'p2'
   );
+  const currentTurnRef = useRef<'p1' | 'p2'>(currentTurn);
+  useEffect(() => {
+    currentTurnRef.current = currentTurn;
+  }, [currentTurn]);
+
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
+  const isResolvingRef = useRef(false);
+  useEffect(() => {
+    isResolvingRef.current = isResolving;
+  }, [isResolving]);
 
   // Visual Effects State
   const [slashActive, setSlashActive] = useState(false);
@@ -145,11 +255,14 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
   const [comboAlert] = useState(0);
 
   // Keypad & D-Pad State
-  const [showDpad, setShowDpad] = useState(false);
   const [dpadCursor, setDpadCursor] = useState<{ r: number; c: number }>({ r: 3, c: 3 });
 
   // Match Outcome
   const [winner, setWinner] = useState<'p1' | 'p2' | null>(null);
+  const winnerRef = useRef<'p1' | 'p2' | null>(null);
+  useEffect(() => {
+    winnerRef.current = winner;
+  }, [winner]);
 
   // Turn Countdown Timer State & Hộp Thoại Cài Đặt Thời Gian
   const [localTurnTimerEnabled, setLocalTurnTimerEnabled] = useState(turnTimerEnabled);
@@ -177,13 +290,25 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
     }
   };
 
-  const addFloatingText = useCallback((text: string, type: FloatingText['type'], target: 'p1' | 'p2') => {
-    const id = `float_${Date.now()}_${Math.random()}`;
-    setFloatingTexts((prev) => [...prev, { id, text, type, target }]);
-    setTimeout(() => {
-      setFloatingTexts((prev) => prev.filter((t) => t.id !== id));
-    }, 950);
+  const triggerVictoryConfetti = useCallback((baseParticles: number) => {
+    try {
+      const count = deviceOptimizer.getOptimalParticleCount(baseParticles);
+      confetti({ particleCount: count, spread: 75, origin: { y: 0.6 } });
+    } catch {
+      // Bỏ qua nếu thiết bị tắt canvas
+    }
   }, []);
+
+  const addFloatingText = useCallback(
+    (text: string, type: FloatingText['type'], target: 'p1' | 'p2') => {
+      const id = `float_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      setFloatingTexts((prev) => [...prev.slice(-8), { id, text, type, target }]);
+      safeTimeout(() => {
+        setFloatingTexts((prev) => prev.filter((t) => t.id !== id));
+      }, 950);
+    },
+    [safeTimeout]
+  );
 
   // Play opening gong & show SPD Initiative floating indicator
   useEffect(() => {
@@ -198,24 +323,29 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
   // Nội tại Nguyễn Khoan (Thái Bình Đạo): Hồi máu nhẹ đầu lượt
   useEffect(() => {
     if (winner) return;
-    if (currentTurn === 'p1' && player1.id === 'nguyen_khoan') {
+    if (currentTurn === 'p1' && player1Ref.current.id === 'nguyen_khoan' && player1Ref.current.hp > 0) {
       setPlayer1((prev) => ({ ...prev, hp: Math.min(prev.maxHp, prev.hp + 15) }));
       addFloatingText('+15 HP (Nội Tại)', 'heal', 'p1');
-    } else if (currentTurn === 'p2' && player2.id === 'nguyen_khoan') {
+    } else if (
+      currentTurn === 'p2' &&
+      player2Ref.current.id === 'nguyen_khoan' &&
+      player2Ref.current.hp > 0
+    ) {
       setPlayer2((prev) => ({ ...prev, hp: Math.min(prev.maxHp, prev.hp + 15) }));
       addFloatingText('+15 HP (Nội Tại)', 'heal', 'p2');
     }
-  }, [currentTurn, winner, player1.id, player2.id, addFloatingText]);
+  }, [currentTurn, winner, addFloatingText]);
 
   // Turn Countdown Timer Effect: Khi hết giờ không ra chiêu thì chuyển lượt sang bên khác
   useEffect(() => {
     if (!localTurnTimerEnabled || winner || isResolving) return;
 
     const timer = setInterval(() => {
+      if (!mountedRef.current || winnerRef.current || isResolvingRef.current) return;
       setTimeLeft((prev) => {
         if (prev <= 1) {
           soundEngine.playBronzeGong();
-          addFloatingText('⏳ HẾT GIỜ!', 'damage', currentTurn);
+          addFloatingText('⏳ HẾT GIỜ!', 'damage', currentTurnRef.current);
           setCurrentTurn((t) => (t === 'p1' ? 'p2' : 'p1'));
           return localTimeLimit;
         }
@@ -224,75 +354,78 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [localTurnTimerEnabled, localTimeLimit, winner, isResolving, currentTurn, addFloatingText]);
+  }, [localTurnTimerEnabled, localTimeLimit, winner, isResolving, addFloatingText]);
 
   // Reset timer on turn switch
   useEffect(() => {
     setTimeLeft(localTimeLimit);
   }, [currentTurn, localTimeLimit]);
 
-  // Subscribe to P2P network moves if in P2P mode
-  useEffect(() => {
-    if (gameMode !== 'PVP_P2P') return;
-
-    const unsubscribe = p2pService.subscribe((msg) => {
-      if (msg.type === 'SWAP_MOVE') {
-        executeSwap(msg.r1, msg.c1, msg.r2, msg.c2, true);
-      } else if (msg.type === 'CAST_SKILL') {
-        executeSkillCast('p2');
-      } else if (msg.type === 'SURRENDER') {
-        setWinner('p1');
-      }
-    });
-
-    return () => unsubscribe();
-  });
-
-  // Execute Swap & Dynamic Feedback Loop with Role Passives
+  // Execute Swap & Dynamic Feedback Loop with Role Passives & Deterministic P2P Sync
   const executeSwap = useCallback(
-    (r1: number, c1: number, r2: number, c2: number, isRemoteP2P = false) => {
-      if (isResolving) return;
+    (
+      r1: number,
+      c1: number,
+      r2: number,
+      c2: number,
+      isRemoteP2P = false,
+      remoteMoveSeed?: number
+    ) => {
+      if (isResolvingRef.current || winnerRef.current) return;
 
-      const isValid = testSwapCreatesMatch(board, r1, c1, r2, c2);
+      const currentBoard = boardRef.current;
+      const isValid = testSwapCreatesMatch(currentBoard, r1, c1, r2, c2);
       if (!isValid) {
         soundEngine.playSwordHit();
         setSelectedCoord(null);
         return;
       }
 
+      isResolvingRef.current = true;
       setIsResolving(true);
       setSelectedCoord(null);
 
+      const moveSeed =
+        typeof remoteMoveSeed === 'number'
+          ? remoteMoveSeed
+          : Math.floor(100000 + Math.random() * 900000);
+
       // Send to P2P peer if we made this move
       if (gameMode === 'PVP_P2P' && !isRemoteP2P) {
-        p2pService.send({ type: 'SWAP_MOVE', r1, c1, r2, c2 });
+        p2pService.send({ type: 'SWAP_MOVE', r1, c1, r2, c2, moveSeed });
       }
 
       // Clone and swap
-      const tempBoard = board.map((row) => row.map((t) => ({ ...t })));
+      const tempBoard = currentBoard.map((row) => row.map((t) => ({ ...t })));
       const t1 = tempBoard[r1][c1];
       const t2 = tempBoard[r2][c2];
       tempBoard[r1][c1] = { ...t2, row: r1, col: c1 };
       tempBoard[r2][c2] = { ...t1, row: r2, col: c2 };
 
-      // Resolve matches and gravity cascade
-      const result = resolveCascade(tempBoard);
+      // Resolve matches and gravity cascade with deterministic moveSeed
+      const result = resolveCascade(tempBoard, moveSeed);
       setBoard(result.newBoard);
 
-      // Determine attacker and defender
-      const activeFighter = currentTurn === 'p1' ? player1 : player2;
-      const defenderFighter = currentTurn === 'p1' ? player2 : player1;
-      const targetSide = currentTurn === 'p1' ? 'p2' : 'p1';
+      const turnSide = currentTurnRef.current;
+      const nextP1 = { ...player1Ref.current };
+      const nextP2 = { ...player2Ref.current };
+
+      const activeFighter = turnSide === 'p1' ? nextP1 : nextP2;
+      const defenderFighter = turnSide === 'p1' ? nextP2 : nextP1;
+      const targetSide: 'p1' | 'p2' = turnSide === 'p1' ? 'p2' : 'p1';
 
       // Hệ số Nội Tại Đinh Bộ Lĩnh (Chân Mệnh Thiên Tử: +15% hiệu quả mọi loại ngọc)
       const isDinhBoLinh = activeFighter.id === 'dinh_bo_linh';
       const emperorMultiplier = isDinhBoLinh ? 1.15 : 1.0;
 
+      // Xác suất tất định từ moveSeed để 2 máy P2P tính sát thương bạo kích khớp nhau 100%
+      const critRoll = ((moveSeed % 997) / 997);
+      const doubleStrikeRoll = (((moveSeed * 31) % 991) / 991);
+
       // 1. SÁT THƯƠNG ĐOẢN KIẾM HOẶC HUYẾT KIẾM + NỘI TẠI TƯỚNG
       if (result.totalSwords > 0) {
-        // Nội tại Phạm Bạch Hổ / Tốc Độ cao: tăng tỷ lệ bạo kích
         const speedCritChance = Math.max(0.05, (activeFighter.spd - 45) * 0.005);
-        const isSpeedCrit = Math.random() < speedCritChance;
+        const isSpeedCrit = critRoll < speedCritChance;
         const isBloodCrit = result.hasBloodSwordCrit || isSpeedCrit;
 
         if (isBloodCrit) {
@@ -303,107 +436,61 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
 
         setSlashActive(true);
         setSlashTarget(targetSide);
-        setTimeout(() => setSlashActive(false), 450);
+        safeTimeout(() => setSlashActive(false), 450);
 
-        // Attacker strikes with 3D animation!
-        if (currentTurn === 'p1') {
-          setPlayer1((prev) => ({ ...prev, status: 'attacking' }));
-        } else {
-          setPlayer2((prev) => ({ ...prev, status: 'attacking' }));
-        }
+        activeFighter.status = 'attacking';
 
-        // Tính sát thương cơ bản + Nội tại Kiều Công Hãn (Xạ Kỵ Thần Tốc +25%) / Nguyễn Thủ Tiệp (+25% sát thương lên Giáp)
         let roleBonusMultiplier = emperorMultiplier;
         if (activeFighter.id === 'kieu_cong_han') roleBonusMultiplier *= 1.25;
         if (activeFighter.id === 'pham_bach_ho' && activeFighter.hp < activeFighter.maxHp * 0.5) {
           roleBonusMultiplier *= 1.3;
         }
-        // Nội tại Kiều Thuận (Hồi Long Liên Kích: 25% đánh đúp)
-        const isDoubleStrike = activeFighter.id === 'kieu_thuan' && Math.random() < 0.25;
+        const isDoubleStrike = activeFighter.id === 'kieu_thuan' && doubleStrikeRoll < 0.25;
         if (isDoubleStrike) roleBonusMultiplier *= 1.5;
 
-        const baseDmg = result.totalSwords * (activeFighter.atk * 0.9) * roleBonusMultiplier;
+        // Áp dụng hệ số độ khó nếu là lượt của AI
+        const aiDmgFactor =
+          turnSide === 'p2' && (gameMode === 'CAMPAIGN' || gameMode === 'PVE_CUSTOM')
+            ? diffTuning.dmgMultiplier
+            : 1.0;
+
+        const baseDmg =
+          result.totalSwords * (activeFighter.atk * 0.9) * roleBonusMultiplier * aiDmgFactor;
         const rawDamage = Math.round(isBloodCrit ? baseDmg * 1.85 : baseDmg);
 
-        // Nội tại Lý Khuê (Cuồng Sư Phá Giáp: xuyên 40% Giáp)
         const armorPierceRatio =
           activeFighter.id === 'ly_khue' ? 0.45 : isBloodCrit ? 0.5 : 0.85;
 
-        if (targetSide === 'p2') {
-          setPlayer2((prev) => {
-            soundEngine.playHurt();
-            let remainDmg = rawDamage;
-            let newArmor = prev.armor;
+        soundEngine.playHurt();
+        let remainDmg = rawDamage;
+        let newArmor = defenderFighter.armor;
 
-            // Nội tại Đỗ Cảnh Thạc / Phạm Phòng Át giảm sát thương nhận vào
-            if (prev.id === 'do_canh_thac' || prev.id === 'pham_phong_at') {
-              remainDmg = Math.round(remainDmg * 0.82);
-            }
+        if (defenderFighter.id === 'do_canh_thac' || defenderFighter.id === 'pham_phong_at') {
+          remainDmg = Math.round(remainDmg * 0.82);
+        }
 
-            if (newArmor > 0) {
-              const absorbCap = Math.round(newArmor * armorPierceRatio);
-              const absorbed = Math.min(absorbCap, remainDmg);
-              newArmor -= absorbed;
-              remainDmg -= absorbed;
-            }
+        if (newArmor > 0) {
+          const absorbCap = Math.round(newArmor * armorPierceRatio);
+          const absorbed = Math.min(absorbCap, remainDmg);
+          newArmor -= absorbed;
+          remainDmg -= absorbed;
+        }
 
-            const newHp = Math.max(0, prev.hp - remainDmg);
-            return {
-              ...prev,
-              armor: newArmor,
-              hp: newHp,
-              status: 'hurt',
-            };
-          });
+        defenderFighter.armor = newArmor;
+        defenderFighter.hp = Math.max(0, defenderFighter.hp - remainDmg);
+        defenderFighter.status = 'hurt';
 
-          if (isBloodCrit) {
-            addFloatingText(`💥 BẠO KÍCH -${rawDamage}!`, 'crit', 'p2');
-          } else {
-            addFloatingText(`-${rawDamage}`, 'damage', 'p2');
-          }
+        if (isBloodCrit) {
+          addFloatingText(`💥 BẠO KÍCH -${rawDamage}!`, 'crit', targetSide);
         } else {
-          setPlayer1((prev) => {
-            soundEngine.playHurt();
-            let remainDmg = rawDamage;
-            let newArmor = prev.armor;
-
-            if (prev.id === 'do_canh_thac' || prev.id === 'pham_phong_at') {
-              remainDmg = Math.round(remainDmg * 0.82);
-            }
-
-            if (newArmor > 0) {
-              const absorbCap = Math.round(newArmor * armorPierceRatio);
-              const absorbed = Math.min(absorbCap, remainDmg);
-              newArmor -= absorbed;
-              remainDmg -= absorbed;
-            }
-
-            const newHp = Math.max(0, prev.hp - remainDmg);
-            return {
-              ...prev,
-              armor: newArmor,
-              hp: newHp,
-              status: 'hurt',
-            };
-          });
-
-          if (isBloodCrit) {
-            addFloatingText(`💥 BẠO KÍCH -${rawDamage}!`, 'crit', 'p1');
-          } else {
-            addFloatingText(`-${rawDamage}`, 'damage', 'p1');
-          }
+          addFloatingText(`-${rawDamage}`, 'damage', targetSide);
         }
 
         // Nội tại Lữ Đường (Khiên Quỷ Phản Đòn: phản 20% sát thương)
         if (defenderFighter.id === 'lu_duong') {
           const reflectDmg = Math.max(8, Math.round(rawDamage * 0.2));
-          if (currentTurn === 'p1') {
-            setPlayer1((prev) => ({ ...prev, hp: Math.max(1, prev.hp - reflectDmg) }));
-            addFloatingText(`🛡️ Phản Đòn -${reflectDmg}`, 'damage', 'p1');
-          } else {
-            setPlayer2((prev) => ({ ...prev, hp: Math.max(1, prev.hp - reflectDmg) }));
-            addFloatingText(`🛡️ Phản Đòn -${reflectDmg}`, 'damage', 'p2');
-          }
+          activeFighter.hp = Math.max(1, activeFighter.hp - reflectDmg);
+          addFloatingText(`🛡️ Phản Đòn -${reflectDmg}`, 'damage', turnSide);
         }
       }
 
@@ -412,21 +499,9 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
         soundEngine.playHeal();
         const tranLamBonus = activeFighter.id === 'tran_lam' ? 1.3 : emperorMultiplier;
         const healAmt = Math.round(result.totalHearts * 30 * tranLamBonus);
-        if (currentTurn === 'p1') {
-          setPlayer1((prev) => ({
-            ...prev,
-            hp: Math.min(prev.maxHp, prev.hp + healAmt),
-            status: 'heal',
-          }));
-          addFloatingText(`+${healAmt} HP`, 'heal', 'p1');
-        } else {
-          setPlayer2((prev) => ({
-            ...prev,
-            hp: Math.min(prev.maxHp, prev.hp + healAmt),
-            status: 'heal',
-          }));
-          addFloatingText(`+${healAmt} HP`, 'heal', 'p2');
-        }
+        activeFighter.hp = Math.min(activeFighter.maxHp, activeFighter.hp + healAmt);
+        if (activeFighter.status === 'idle') activeFighter.status = 'heal';
+        addFloatingText(`+${healAmt} HP`, 'heal', turnSide);
       }
 
       // 3. BÁNH CHƯNG XANH TĂNG GIÁP + Nội tại Nguyễn Siêu (+35% Giáp)
@@ -434,21 +509,9 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
         soundEngine.playShield();
         const nguyenSieuBonus = activeFighter.id === 'nguyen_sieu' ? 1.35 : emperorMultiplier;
         const armorAmt = Math.round(result.totalChungCakes * 16 * nguyenSieuBonus);
-        if (currentTurn === 'p1') {
-          setPlayer1((prev) => ({
-            ...prev,
-            armor: Math.min(prev.maxArmor, prev.armor + armorAmt),
-            status: 'shield',
-          }));
-          addFloatingText(`+${armorAmt} Giáp`, 'armor', 'p1');
-        } else {
-          setPlayer2((prev) => ({
-            ...prev,
-            armor: Math.min(prev.maxArmor, prev.armor + armorAmt),
-            status: 'shield',
-          }));
-          addFloatingText(`+${armorAmt} Giáp`, 'armor', 'p2');
-        }
+        activeFighter.armor = Math.min(activeFighter.maxArmor, activeFighter.armor + armorAmt);
+        if (activeFighter.status === 'idle') activeFighter.status = 'shield';
+        addFloatingText(`+${armorAmt} Giáp`, 'armor', turnSide);
       }
 
       // 4. NGỌC THÁI CỰC TÍCH NỘ (ĂN ÂM DƯƠNG) + Nội tại Ngô Xương Xí / Ngô Nhật Khánh
@@ -458,31 +521,16 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
           activeFighter.id === 'ngo_xuong_xi' || activeFighter.id === 'ngo_nhat_khanh'
             ? Math.ceil(result.totalYinYang * 1.25)
             : Math.ceil(result.totalYinYang * emperorMultiplier);
-        if (currentTurn === 'p1') {
-          setPlayer1((prev) => ({
-            ...prev,
-            mana: Math.min(prev.maxMana, prev.mana + manaBonus),
-            status: prev.status === 'idle' ? 'mana' : prev.status,
-          }));
-          addFloatingText(`+${manaBonus} Mana`, 'skill', 'p1');
-        } else {
-          setPlayer2((prev) => ({
-            ...prev,
-            mana: Math.min(prev.maxMana, prev.mana + manaBonus),
-            status: prev.status === 'idle' ? 'mana' : prev.status,
-          }));
-          addFloatingText(`+${manaBonus} Mana`, 'skill', 'p2');
-        }
+        activeFighter.mana = Math.min(activeFighter.maxMana, activeFighter.mana + manaBonus);
+        if (activeFighter.status === 'idle') activeFighter.status = 'mana';
+        addFloatingText(`+${manaBonus} Mana`, 'skill', turnSide);
       }
 
       // 5. THỎI VÀNG (ĂN VÀNG)
       if (result.totalGold > 0) {
         soundEngine.playGold();
-        if (currentTurn === 'p1') {
-          setPlayer1((prev) => ({
-            ...prev,
-            goldEarnedThisMatch: prev.goldEarnedThisMatch + result.totalGold,
-          }));
+        if (turnSide === 'p1') {
+          nextP1.goldEarnedThisMatch += result.totalGold;
           addFloatingText(`+${result.totalGold} Vàng`, 'gold', 'p1');
         }
       }
@@ -495,187 +543,241 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
         const elixirMana = Math.ceil(result.totalElixirs * 8 * emperorMultiplier);
         const elixirAtkBonus = Math.max(2, Math.round(result.totalElixirs * 2 * emperorMultiplier));
 
-        if (currentTurn === 'p1') {
-          setPlayer1((prev) => ({
-            ...prev,
-            hp: Math.min(prev.maxHp, prev.hp + elixirHeal),
-            mana: Math.min(prev.maxMana, prev.mana + elixirMana),
-            atk: prev.atk + elixirAtkBonus,
-            status: prev.status === 'idle' ? 'heal' : prev.status,
-          }));
-          addFloatingText(
-            `🍇 Linh Đan +${elixirHeal}HP +${elixirMana}MP +${elixirAtkBonus}ATK`,
-            'heal',
-            'p1'
-          );
-        } else {
-          setPlayer2((prev) => ({
-            ...prev,
-            hp: Math.min(prev.maxHp, prev.hp + elixirHeal),
-            mana: Math.min(prev.maxMana, prev.mana + elixirMana),
-            atk: prev.atk + elixirAtkBonus,
-            status: prev.status === 'idle' ? 'heal' : prev.status,
-          }));
-          addFloatingText(
-            `🍇 Linh Đan +${elixirHeal}HP +${elixirMana}MP +${elixirAtkBonus}ATK`,
-            'heal',
-            'p2'
-          );
-        }
+        activeFighter.hp = Math.min(activeFighter.maxHp, activeFighter.hp + elixirHeal);
+        activeFighter.mana = Math.min(activeFighter.maxMana, activeFighter.mana + elixirMana);
+        activeFighter.atk += elixirAtkBonus;
+        if (activeFighter.status === 'idle') activeFighter.status = 'heal';
+
+        addFloatingText(
+          `🍇 Linh Đan +${elixirHeal}HP +${elixirMana}MP +${elixirAtkBonus}ATK`,
+          'heal',
+          turnSide
+        );
       }
 
-      // Reset animation statuses after complete strike and return to defensive stance (nếu chưa kết thúc trận)
-      setTimeout(() => {
+      // Cập nhật state 1 lần duy nhất, tinh khiết (không lồng side-effect trong setState)
+      player1Ref.current = nextP1;
+      player2Ref.current = nextP2;
+      setPlayer1(nextP1);
+      setPlayer2(nextP2);
+
+      // Reset animation statuses after complete strike
+      safeTimeout(() => {
         setPlayer1((prev) =>
           prev.status === 'victory' || prev.status === 'defeat' ? prev : { ...prev, status: 'idle' }
         );
         setPlayer2((prev) =>
           prev.status === 'victory' || prev.status === 'defeat' ? prev : { ...prev, status: 'idle' }
         );
-      }, 620);
+      }, 600);
 
-      // Check Turn Transition, Victory/Defeat ("Ta xin hàng!"), or Extra Turn (Ăn 4-5 viên)
-      setTimeout(() => {
+      // Check Turn Transition, Victory/Defeat, or Extra Turn (Ăn 4-5 viên)
+      safeTimeout(() => {
+        if (nextP2.hp <= 0) {
+          soundEngine.playVictory();
+          triggerVictoryConfetti(100);
+          setPlayer1((prev) => ({ ...prev, status: 'victory' }));
+          setPlayer2((prev) => ({ ...prev, status: 'defeat' }));
+          safeTimeout(() => {
+            isResolvingRef.current = false;
+            setIsResolving(false);
+            setWinner('p1');
+          }, 1250);
+          return;
+        }
+
+        if (nextP1.hp <= 0) {
+          setPlayer2((prev) => ({ ...prev, status: 'victory' }));
+          setPlayer1((prev) => ({ ...prev, status: 'defeat' }));
+          safeTimeout(() => {
+            isResolvingRef.current = false;
+            setIsResolving(false);
+            setWinner('p2');
+          }, 1250);
+          return;
+        }
+
+        isResolvingRef.current = false;
         setIsResolving(false);
-
-        setPlayer2((p2) => {
-          if (p2.hp <= 0) {
-            soundEngine.playVictory();
-            confetti({ particleCount: 100, spread: 80, origin: { y: 0.6 } });
-            setPlayer1((p1Prev) => ({ ...p1Prev, status: 'victory' }));
-            setTimeout(() => setWinner('p1'), 1350);
-            return { ...p2, status: 'defeat' };
-          }
-          return p2;
-        });
-
-        setPlayer1((p1) => {
-          if (p1.hp <= 0) {
-            setPlayer2((p2Prev) => ({ ...p2Prev, status: 'victory' }));
-            setTimeout(() => setWinner('p2'), 1350);
-            return { ...p1, status: 'defeat' };
-          }
-          return p1;
-        });
 
         if (result.extraTurn) {
           soundEngine.playThunderExtraTurn();
           setExtraTurnAlert(true);
-          setTimeout(() => setExtraTurnAlert(false), 1400);
-          addFloatingText('⚡ THÊM LƯỢT ĐÁNH!', 'extra_turn', currentTurn);
+          safeTimeout(() => setExtraTurnAlert(false), 1350);
+          addFloatingText('⚡ THÊM LƯỢT ĐÁNH!', 'extra_turn', turnSide);
         } else {
           setCurrentTurn((prev) => (prev === 'p1' ? 'p2' : 'p1'));
         }
       }, 660);
     },
-    [board, currentTurn, isResolving, player1, player2, gameMode, addFloatingText]
+    [gameMode, diffTuning.dmgMultiplier, addFloatingText, safeTimeout, triggerVictoryConfetti]
   );
 
-  // Execute Ultimate Martial Art Skill Cast (3D Cutscene + Heavy Strike)
+  // Execute Ultimate Martial Art Skill Cast (3D Cutscene + Heavy Strike + P2P Sync)
   const executeSkillCast = useCallback(
-    (caster: 'p1' | 'p2') => {
+    (caster: 'p1' | 'p2', isRemoteP2P = false) => {
+      if (isResolvingRef.current || winnerRef.current) return;
+
+      const nextP1 = { ...player1Ref.current };
+      const nextP2 = { ...player2Ref.current };
+      const casterFighter = caster === 'p1' ? nextP1 : nextP2;
+
+      if (!isRemoteP2P && casterFighter.mana < casterFighter.skillCost) return;
+
+      isResolvingRef.current = true;
+      setIsResolving(true);
+
+      if (gameMode === 'PVP_P2P' && !isRemoteP2P) {
+        p2pService.send({
+          type: 'CAST_SKILL',
+          caster,
+          skillName: casterFighter.skillName,
+        });
+      }
+
       soundEngine.playSkillCast();
       setSlashActive(true);
       setSlashTarget(caster === 'p1' ? 'p2' : 'p1');
-      setTimeout(() => setSlashActive(false), 620);
+      safeTimeout(() => setSlashActive(false), 620);
 
       if (caster === 'p1') {
-        const skillMultiplier = player1.id === 'ngo_xuong_xi' ? 5.2 : 4.6;
-        const skillDmg = Math.round(player1.atk * skillMultiplier);
-        setPlayer1((prev) => ({ ...prev, mana: 0, status: 'skill' }));
-        setPlayer2((prev) => {
-          soundEngine.playHurt();
-          let remain = skillDmg;
-          let newArmor = prev.armor;
-          if (newArmor > 0) {
-            const absorbed = Math.min(newArmor, remain);
-            newArmor -= absorbed;
-            remain -= absorbed;
-          }
-          const nextHp = Math.max(0, prev.hp - remain);
-          if (nextHp <= 0) {
-            soundEngine.playVictory();
-            confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
-            setTimeout(() => {
-              setPlayer1((p1Prev) => ({ ...p1Prev, status: 'victory' }));
-              setPlayer2((p2Prev) => ({ ...p2Prev, status: 'defeat' }));
-            }, 450);
-            setTimeout(() => setWinner('p1'), 1650);
-          }
-          return {
-            ...prev,
-            armor: newArmor,
-            hp: nextHp,
-            status: 'hurt',
-          };
-        });
-        addFloatingText(`${player1.skillName}!`, 'skill', 'p1');
+        const skillMultiplier = nextP1.id === 'ngo_xuong_xi' ? 5.2 : 4.6;
+        const skillDmg = Math.round(nextP1.atk * skillMultiplier);
+        nextP1.mana = 0;
+        nextP1.status = 'skill';
+
+        soundEngine.playHurt();
+        let remain = skillDmg;
+        let newArmor = nextP2.armor;
+        if (newArmor > 0) {
+          const absorbed = Math.min(newArmor, remain);
+          newArmor -= absorbed;
+          remain -= absorbed;
+        }
+        nextP2.armor = newArmor;
+        nextP2.hp = Math.max(0, nextP2.hp - remain);
+        nextP2.status = 'hurt';
+
+        addFloatingText(`${nextP1.skillName}!`, 'skill', 'p1');
         addFloatingText(`💥 -${skillDmg} TUYỆT KỸ!`, 'crit', 'p2');
       } else {
-        const skillMultiplier = player2.id === 'ngo_xuong_xi' ? 4.9 : 4.3;
-        const skillDmg = Math.round(player2.atk * skillMultiplier);
-        setPlayer2((prev) => ({ ...prev, mana: 0, status: 'skill' }));
-        setPlayer1((prev) => {
-          soundEngine.playHurt();
-          let remain = skillDmg;
-          let newArmor = prev.armor;
-          if (newArmor > 0) {
-            const absorbed = Math.min(newArmor, remain);
-            newArmor -= absorbed;
-            remain -= absorbed;
-          }
-          const nextHp = Math.max(0, prev.hp - remain);
-          if (nextHp <= 0) {
-            setTimeout(() => {
-              setPlayer2((p2Prev) => ({ ...p2Prev, status: 'victory' }));
-              setPlayer1((p1Prev) => ({ ...p1Prev, status: 'defeat' }));
-            }, 450);
-            setTimeout(() => setWinner('p2'), 1650);
-          }
-          return {
-            ...prev,
-            armor: newArmor,
-            hp: nextHp,
-            status: 'hurt',
-          };
-        });
-        addFloatingText(`${player2.skillName}!`, 'skill', 'p2');
+        const aiSkillScale =
+          gameMode === 'CAMPAIGN' || gameMode === 'PVE_CUSTOM' ? diffTuning.dmgMultiplier : 1.0;
+        const skillMultiplier = (nextP2.id === 'ngo_xuong_xi' ? 4.9 : 4.3) * aiSkillScale;
+        const skillDmg = Math.round(nextP2.atk * skillMultiplier);
+        nextP2.mana = 0;
+        nextP2.status = 'skill';
+
+        soundEngine.playHurt();
+        let remain = skillDmg;
+        let newArmor = nextP1.armor;
+        if (newArmor > 0) {
+          const absorbed = Math.min(newArmor, remain);
+          newArmor -= absorbed;
+          remain -= absorbed;
+        }
+        nextP1.armor = newArmor;
+        nextP1.hp = Math.max(0, nextP1.hp - remain);
+        nextP1.status = 'hurt';
+
+        addFloatingText(`${nextP2.skillName}!`, 'skill', 'p2');
         addFloatingText(`💥 -${skillDmg} TUYỆT KỸ!`, 'crit', 'p1');
       }
 
-      setTimeout(() => {
-        setPlayer1((prev) =>
-          prev.status === 'victory' || prev.status === 'defeat' ? prev : { ...prev, status: 'idle' }
-        );
-        setPlayer2((prev) =>
-          prev.status === 'victory' || prev.status === 'defeat' ? prev : { ...prev, status: 'idle' }
-        );
+      player1Ref.current = nextP1;
+      player2Ref.current = nextP2;
+      setPlayer1(nextP1);
+      setPlayer2(nextP2);
+
+      safeTimeout(() => {
+        if (nextP2.hp <= 0) {
+          soundEngine.playVictory();
+          triggerVictoryConfetti(110);
+          setPlayer1((prev) => ({ ...prev, status: 'victory' }));
+          setPlayer2((prev) => ({ ...prev, status: 'defeat' }));
+          safeTimeout(() => {
+            isResolvingRef.current = false;
+            setIsResolving(false);
+            setWinner('p1');
+          }, 1200);
+          return;
+        }
+
+        if (nextP1.hp <= 0) {
+          setPlayer2((prev) => ({ ...prev, status: 'victory' }));
+          setPlayer1((prev) => ({ ...prev, status: 'defeat' }));
+          safeTimeout(() => {
+            isResolvingRef.current = false;
+            setIsResolving(false);
+            setWinner('p2');
+          }, 1200);
+          return;
+        }
+
+        setPlayer1((prev) => ({ ...prev, status: 'idle' }));
+        setPlayer2((prev) => ({ ...prev, status: 'idle' }));
+        isResolvingRef.current = false;
+        setIsResolving(false);
+        setCurrentTurn((prev) => (prev === 'p1' ? 'p2' : 'p1'));
       }, 680);
     },
-    [player1.atk, player1.id, player1.skillName, player2.atk, player2.id, player2.skillName, addFloatingText]
+    [gameMode, diffTuning.dmgMultiplier, addFloatingText, safeTimeout, triggerVictoryConfetti]
   );
+
+  // Subscribe to P2P network moves if in P2P mode (Fixed dependency array to prevent memory leak!)
+  useEffect(() => {
+    if (gameMode !== 'PVP_P2P') return;
+
+    const unsubscribe = p2pService.subscribe((msg) => {
+      if (msg.type === 'SWAP_MOVE') {
+        executeSwap(msg.r1, msg.c1, msg.r2, msg.c2, true, msg.moveSeed);
+      } else if (msg.type === 'CAST_SKILL') {
+        executeSkillCast(msg.caster || (currentTurnRef.current === 'p1' ? 'p1' : 'p2'), true);
+      } else if (msg.type === 'SURRENDER') {
+        const loser = msg.side || (p2pIsHost ? 'p2' : 'p1');
+        setWinner(loser === 'p1' ? 'p2' : 'p1');
+      }
+    });
+
+    return () => unsubscribe();
+  }, [gameMode, p2pIsHost, executeSwap, executeSkillCast]);
 
   // AI Turn Handling for Campaign Mode & PvE Custom Mode
   useEffect(() => {
     if (winner || player1.hp <= 0 || player2.hp <= 0) return;
 
     const isAiTurn =
-      currentTurn === 'p2' && (gameMode === 'CAMPAIGN' || gameMode === 'PVE_CUSTOM') && !isResolving;
+      currentTurn === 'p2' &&
+      (gameMode === 'CAMPAIGN' || gameMode === 'PVE_CUSTOM') &&
+      !isResolving;
 
     if (isAiTurn) {
       setIsAiThinking(true);
 
-      const delay = gameMode === 'PVE_CUSTOM' ? 700 : 850;
-      const timer = setTimeout(() => {
-        if (player2.mana >= player2.skillCost) {
+      const delay =
+        gameMode === 'PVE_CUSTOM' && pveDifficulty === 'EASY'
+          ? 900
+          : gameMode === 'PVE_CUSTOM'
+          ? 700
+          : 820;
+
+      const timer = safeTimeout(() => {
+        setIsAiThinking(false);
+
+        // Quyết định dùng Tuyệt Kỹ theo độ khó (Tập sự ít dùng nộ hơn, Đại tướng/Địa ngục dùng ngay)
+        if (
+          player2Ref.current.mana >= player2Ref.current.skillCost &&
+          Math.random() <= diffTuning.skillChance
+        ) {
           executeSkillCast('p2');
-          setIsAiThinking(false);
-          setCurrentTurn('p1');
           return;
         }
 
-        const bestMove = findBestAIMove(board, p2Warlord.aiAggressiveness);
-        setIsAiThinking(false);
+        const bestMove = findBestAIMove(boardRef.current, diffTuning.aggressiveness, {
+          aiHpRatio: player2Ref.current.hp / Math.max(1, player2Ref.current.maxHp),
+          aiManaRatio: player2Ref.current.mana / Math.max(1, player2Ref.current.maxMana),
+          playerHpRatio: player1Ref.current.hp / Math.max(1, player1Ref.current.maxHp),
+        });
 
         if (bestMove) {
           executeSwap(bestMove.r1, bestMove.c1, bestMove.r2, bestMove.c2);
@@ -690,61 +792,61 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
   }, [
     currentTurn,
     gameMode,
+    pveDifficulty,
     isResolving,
-    board,
-    p2Warlord.aiAggressiveness,
     winner,
     player1.hp,
     player2.hp,
-    player2.mana,
-    player2.skillCost,
+    diffTuning.aggressiveness,
+    diffTuning.skillChance,
     executeSwap,
     executeSkillCast,
+    safeTimeout,
   ]);
 
-  // Virtual D-pad Movement handlers
-  const handleDpadMove = (direction: 'up' | 'down' | 'left' | 'right') => {
-    setDpadCursor((prev) => {
-      let r = prev.r;
-      let c = prev.c;
-      if (direction === 'up' && r > 0) r--;
-      if (direction === 'down' && r < GRID_ROWS - 1) r++;
-      if (direction === 'left' && c > 0) c--;
-      if (direction === 'right' && c < GRID_COLS - 1) c++;
-      return { r, c };
-    });
-  };
+  // Xác định quyền điều khiển bàn cờ theo chế độ chơi (Single / Hotseat / 2-Device P2P)
+  const myP2PSide: 'p1' | 'p2' = p2pIsHost ? 'p1' : 'p2';
+  const isMyTurn =
+    gameMode === 'CAMPAIGN' || gameMode === 'PVE_CUSTOM'
+      ? currentTurn === 'p1'
+      : gameMode === 'PVP_P2P'
+      ? currentTurn === myP2PSide
+      : true;
 
-  const handleDpadSelect = () => {
-    if (!selectedCoord) {
-      setSelectedCoord(dpadCursor);
-    } else if (selectedCoord.r === dpadCursor.r && selectedCoord.c === dpadCursor.c) {
-      setSelectedCoord(null);
-    } else if (areAdjacent(selectedCoord.r, selectedCoord.c, dpadCursor.r, dpadCursor.c)) {
-      executeSwap(selectedCoord.r, selectedCoord.c, dpadCursor.r, dpadCursor.c);
-    } else {
-      setSelectedCoord(dpadCursor);
-    }
-  };
+  const isInteractable =
+    isMyTurn && !isResolving && !isAiThinking && !winner && player1.hp > 0 && player2.hp > 0;
 
-  const isMyTurn = gameMode === 'CAMPAIGN' || gameMode === 'PVE_CUSTOM' ? currentTurn === 'p1' : true;
-  const isInteractable = isMyTurn && !isResolving && !isAiThinking && !winner && player1.hp > 0 && player2.hp > 0;
+  const activeSkillFighter =
+    gameMode === 'PVP_P2P'
+      ? myP2PSide === 'p1'
+        ? player1
+        : player2
+      : currentTurn === 'p1'
+      ? player1
+      : player2;
 
   const handleSurrender = () => {
     if (winner) return;
     soundEngine.playHurt();
+    const surrenderingSide: 'p1' | 'p2' =
+      gameMode === 'PVP_P2P'
+        ? myP2PSide
+        : gameMode === 'PVP_HOTSEAT'
+        ? currentTurn
+        : 'p1';
+
     if (gameMode === 'PVP_P2P') {
-      p2pService.send({ type: 'SURRENDER' });
+      p2pService.send({ type: 'SURRENDER', side: surrenderingSide });
     }
-    const surrenderingSide = gameMode === 'PVP_HOTSEAT' ? currentTurn : 'p1';
+
     if (surrenderingSide === 'p1') {
       setPlayer1((prev) => ({ ...prev, status: 'defeat' }));
       setPlayer2((prev) => ({ ...prev, status: 'victory' }));
-      setTimeout(() => setWinner('p2'), 900);
+      safeTimeout(() => setWinner('p2'), 850);
     } else {
       setPlayer2((prev) => ({ ...prev, status: 'defeat' }));
       setPlayer1((prev) => ({ ...prev, status: 'victory' }));
-      setTimeout(() => setWinner('p1'), 900);
+      safeTimeout(() => setWinner('p1'), 850);
     }
   };
 
@@ -838,9 +940,9 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
 
       {/* ĐẾ ĐÁY HOÀNG KIM ĐÔNG SƠN TRÀN VIỀN: TUYỆT KỸ NỘ */}
       <SkillButtons
-        fighter={currentTurn === 'p1' ? player1 : player2}
+        fighter={activeSkillFighter}
         isTurn={isInteractable}
-        onCastSkill={() => executeSkillCast(currentTurn)}
+        onCastSkill={() => executeSkillCast(gameMode === 'PVP_P2P' ? myP2PSide : currentTurn)}
       />
 
       {/* HỘP THOẠI CÀI ĐẶT THỜI GIAN ĐỒNG HỒ */}
@@ -857,7 +959,7 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
       {winner && (
         <div className="modal-backdrop-safe">
           <div className="w-full max-w-sm bg-stone-900 border-2 border-amber-600 rounded-2xl p-4 sm:p-5 text-center shadow-2xl animate-in fade-in zoom-in-95 max-h-full overflow-y-auto">
-            {winner === 'p1' ? (
+            {(gameMode === 'PVP_P2P' ? winner === myP2PSide : winner === 'p1') ? (
               <>
                 <div className="w-16 h-16 rounded-full bg-amber-500/20 border-2 border-amber-400 mx-auto flex items-center justify-center text-3xl mb-3 animate-bounce">
                   🏆
@@ -868,7 +970,7 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
                 <p className="text-xs text-stone-300 mt-1">
                   {gameMode === 'CAMPAIGN'
                     ? `Bạn đã xuất sắc đánh bại ${p2Warlord.name}, thu phục thành trì ${p2Warlord.territory} và mở rộng bờ cõi!`
-                    : `Chúc mừng ${player1.name} đã đánh bại ${player2.name} và giành vương miện bá chủ!`}
+                    : `Chúc mừng ${winner === 'p1' ? player1.name : player2.name} đã giành chiến thắng thuyết phục!`}
                 </p>
 
                 <div className="mt-4 p-3 bg-stone-950 rounded-xl border border-amber-900/60 flex items-center justify-around text-xs">
@@ -924,7 +1026,7 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
                 <p className="text-xs text-stone-300 mt-1">
                   {gameMode === 'CAMPAIGN'
                     ? `Sức mạnh của ${p2Warlord.name} quá thâm hậu. Hãy tích lũy vàng mua thêm vũ khí, giáp trụ và quay lại phục thù!`
-                    : `Chúc mừng ${player2.name} đã xuất sắc chiến thắng ván đấu đối kháng!`}
+                    : `Chúc mừng ${winner === 'p1' ? player1.name : player2.name} đã xuất sắc chiến thắng ván đấu đối kháng!`}
                 </p>
 
                 <button

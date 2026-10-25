@@ -3,7 +3,7 @@
  * Giao diện thương mại hóa tràn viền 100% khung hình với Thanh Đỉnh & Đế Đáy mạ đồng Đông Sơn hoàng kim.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Warlord } from '../../types/game';
 import { ALL_CHARACTERS } from '../../data/warlords';
 import { WarlordCard3D } from '../character/WarlordCard3D';
@@ -12,7 +12,13 @@ import { Swords, Smartphone, Wifi, ArrowLeft, X } from 'lucide-react';
 
 interface PvPLobbyProps {
   onStartHotseat: (p1Warlord: Warlord, p2Warlord: Warlord) => void;
-  onStartP2P: (myWarlord: Warlord, roomId: string, isHost: boolean) => void;
+  onStartP2P: (
+    myWarlord: Warlord,
+    roomId: string,
+    isHost: boolean,
+    opponentWarlord?: Warlord,
+    initialBoardSeed?: number
+  ) => void;
   onBack: () => void;
 }
 
@@ -27,8 +33,28 @@ export const PvPLobby: React.FC<PvPLobbyProps> = ({
   const [p2WarlordId, setP2WarlordId] = useState<string>('pham_bach_ho');
 
   // P2P Room Code states
-  const [roomCode, setRoomCode] = useState<string>('12SQ');
+  const [roomCode, setRoomCode] = useState<string>('');
   const [waitingForGuest, setWaitingForGuest] = useState<boolean>(false);
+  const [isJoiningRoom, setIsJoiningRoom] = useState<boolean>(false);
+  const [p2pStatusText, setP2pStatusText] = useState<string | null>(null);
+
+  const p1WarlordIdRef = useRef(p1WarlordId);
+  useEffect(() => {
+    p1WarlordIdRef.current = p1WarlordId;
+    p2pService.hostWarlordId = p1WarlordId;
+  }, [p1WarlordId]);
+
+  const unsubRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (unsubRef.current) {
+        unsubRef.current();
+        unsubRef.current = null;
+      }
+      p2pService.stopJoinRetry();
+    };
+  }, []);
 
   const p1Character = ALL_CHARACTERS.find((c) => c.id === p1WarlordId) || ALL_CHARACTERS[0];
   const p2Character = ALL_CHARACTERS.find((c) => c.id === p2WarlordId) || ALL_CHARACTERS[1];
@@ -39,39 +65,106 @@ export const PvPLobby: React.FC<PvPLobbyProps> = ({
   };
 
   const handleCreateRoom = () => {
+    if (unsubRef.current) {
+      unsubRef.current();
+      unsubRef.current = null;
+    }
+
     const code = Math.floor(1000 + Math.random() * 9000).toString();
     setRoomCode(code);
     setWaitingForGuest(true);
-    p2pService.createRoom(code, p1WarlordId);
+    setIsJoiningRoom(false);
+    setP2pStatusText('Đang mở cổng kết nối...');
 
+    p2pService.createRoom(code, p1WarlordIdRef.current, () => {
+      setP2pStatusText('Đang đợi đối thủ nhập mã vào phòng...');
+    });
+
+    let started = false;
     const unsubscribe = p2pService.subscribe((msg) => {
-      if (msg.type === 'JOIN_ROOM' && msg.roomId === code) {
+      if (started) return;
+      if (msg.type === 'JOIN_ROOM' && msg.roomId.toUpperCase() === code.toUpperCase()) {
+        started = true;
+        const seed = Math.floor(100000 + Math.random() * 900000);
+        const hostChar =
+          ALL_CHARACTERS.find((c) => c.id === p1WarlordIdRef.current) || ALL_CHARACTERS[0];
+        const guestChar =
+          ALL_CHARACTERS.find((c) => c.id === msg.warlordId) || ALL_CHARACTERS[1];
+
+        p2pService.hostWarlordId = hostChar.id;
+        p2pService.clientWarlordId = guestChar.id;
+        p2pService.initialBoardSeed = seed;
+
+        const readyPacket = {
+          type: 'ROOM_READY' as const,
+          roomId: code,
+          hostWarlordId: hostChar.id,
+          clientWarlordId: guestChar.id,
+          initialBoardSeed: seed,
+        };
+
+        p2pService.send(readyPacket);
+        setTimeout(() => p2pService.send(readyPacket), 160);
+
         unsubscribe();
-        p2pService.send({
-          type: 'ROOM_READY',
-          hostWarlordId: p1WarlordId,
-          clientWarlordId: msg.warlordId,
-          initialBoardSeed: Date.now(),
-        });
-        onStartP2P(p1Character, code, true);
+        unsubRef.current = null;
+        onStartP2P(hostChar, code, true, guestChar, seed);
       }
     });
+
+    unsubRef.current = unsubscribe;
   };
 
   const handleJoinRoom = () => {
-    if (!roomCode.trim()) return;
-    p2pService.joinRoom(roomCode, 'Khách', p1WarlordId);
+    const cleanCode = roomCode.trim().toUpperCase();
+    if (!cleanCode) {
+      setP2pStatusText('Vui lòng nhập Mã Phòng từ Máy 1!');
+      return;
+    }
 
+    if (unsubRef.current) {
+      unsubRef.current();
+      unsubRef.current = null;
+    }
+
+    setWaitingForGuest(false);
+    setIsJoiningRoom(true);
+    setP2pStatusText(`Đang kết nối vào phòng ${cleanCode}...`);
+
+    let started = false;
     const unsubscribe = p2pService.subscribe((msg) => {
-      if (msg.type === 'ROOM_READY') {
+      if (started) return;
+      if (
+        msg.type === 'ROOM_READY' &&
+        (!msg.roomId || msg.roomId.toUpperCase() === cleanCode)
+      ) {
+        started = true;
+        p2pService.stopJoinRetry();
         unsubscribe();
-        onStartP2P(p1Character, roomCode, false);
+        unsubRef.current = null;
+
+        const myChar =
+          ALL_CHARACTERS.find((c) => c.id === p1WarlordIdRef.current) || ALL_CHARACTERS[0];
+        const hostChar =
+          ALL_CHARACTERS.find((c) => c.id === msg.hostWarlordId) || ALL_CHARACTERS[1];
+
+        p2pService.hostWarlordId = hostChar.id;
+        p2pService.clientWarlordId = myChar.id;
+        p2pService.initialBoardSeed = msg.initialBoardSeed;
+
+        onStartP2P(myChar, cleanCode, false, hostChar, msg.initialBoardSeed);
       }
     });
 
-    setTimeout(() => {
-      onStartP2P(p1Character, roomCode, false);
-    }, 800);
+    unsubRef.current = unsubscribe;
+
+    p2pService.joinRoom(cleanCode, 'Khách', p1WarlordIdRef.current, (errMsg) => {
+      if (!started) {
+        setIsJoiningRoom(false);
+        p2pService.stopJoinRetry();
+        setP2pStatusText(errMsg);
+      }
+    });
   };
 
   return (
@@ -264,7 +357,7 @@ export const PvPLobby: React.FC<PvPLobbyProps> = ({
                       {roomCode}
                     </div>
                     <div className="text-[10px] text-emerald-300 animate-pulse">
-                      Đang đợi đối thủ vào phòng...
+                      {p2pStatusText || 'Đang đợi đối thủ vào phòng...'}
                     </div>
                   </div>
                 ) : (
@@ -293,17 +386,26 @@ export const PvPLobby: React.FC<PvPLobbyProps> = ({
                     type="text"
                     maxLength={6}
                     value={roomCode}
-                    onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                    onChange={(e) => {
+                      setRoomCode(e.target.value.toUpperCase());
+                      if (waitingForGuest) setWaitingForGuest(false);
+                    }}
                     placeholder="MÃ PHÒNG (VD: 8899)"
                     className="w-full bg-amber-900/90 border border-sky-400 rounded-lg p-1.5 text-center text-sm font-black text-white tracking-widest uppercase"
                   />
                   <button
                     type="button"
                     onClick={handleJoinRoom}
-                    className="w-full py-2 bg-sky-500 hover:bg-sky-400 text-stone-950 font-black text-xs rounded-lg active:scale-95 transition cursor-pointer shadow"
+                    disabled={isJoiningRoom}
+                    className="w-full py-2 bg-sky-500 hover:bg-sky-400 disabled:opacity-60 text-stone-950 font-black text-xs rounded-lg active:scale-95 transition cursor-pointer shadow"
                   >
-                    VÀO CHIẾN ĐẤU
+                    {isJoiningRoom ? 'ĐANG KẾT NỐI...' : 'VÀO CHIẾN ĐẤU'}
                   </button>
+                  {!waitingForGuest && p2pStatusText && (
+                    <div className="text-[10px] text-amber-200 text-center leading-tight pt-0.5">
+                      {p2pStatusText}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

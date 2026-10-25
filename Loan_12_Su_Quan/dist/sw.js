@@ -1,21 +1,22 @@
 /**
- * Loạn 12 Sứ Quân — Service Worker Offline Engine (PWA v5)
+ * Loạn 12 Sứ Quân — Service Worker Offline Engine (PWA v6)
  * Hỗ trợ chơi game 100% offline hoàn chỉnh: tải 1 lần và dùng mãi mãi không cần mạng internet / 4G / WiFi.
  * Toàn bộ mã nguồn, dữ liệu 13 Sứ Quân, hình ảnh, sa bàn chiến dịch và font chữ được lưu vĩnh viễn trong CacheStorage.
  */
 
-const CACHE_NAME = 'loan-12-su-quan-v5';
+const CACHE_NAME = 'loan-12-su-quan-v8';
 
-// Danh sách toàn bộ tài nguyên cốt lõi cần nạp vào bộ nhớ đệm ngay khi cài đặt
+// Danh sách toàn bộ tài nguyên cốt lõi cần nạp vào bộ nhớ đệm
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
+  '/legacy-bundle.css',
+  '/legacy-bundle.js',
   '/manifest.webmanifest',
   '/apple-touch-icon.png',
   '/app-logo.png',
   '/campaign_map.png',
   '/campaign_map.jpeg',
-  '/favicon.ico',
   // Tất cả 13 ảnh thẻ tướng & linh thú + tài nguyên nghệ thuật
   '/assets/aistudio/IMG_2706_d13bfa83.jpeg',
   '/assets/aistudio/IMG_2711_a7aea1e8.png',
@@ -44,16 +45,28 @@ const PRECACHE_ASSETS = [
   '/assets/aistudio/screenshot_1_1ecd9f01.png',
 ];
 
+async function notifyClients(message) {
+  try {
+    const clients = await self.clients.matchAll({ includeUncontrolled: true });
+    for (const client of clients) {
+      client.postMessage(message);
+    }
+  } catch {
+    // Ignore client notification errors
+  }
+}
+
 // Cài đặt Service Worker và nạp trước toàn bộ tài nguyên vào cache
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
-      await Promise.allSettled(
+      await Promise.all(
         PRECACHE_ASSETS.map((url) =>
           cache.add(new Request(url, { cache: 'reload' })).catch(() => {})
         )
       );
+      await notifyClients({ type: 'CACHE_READY' });
     })
   );
 });
@@ -74,6 +87,7 @@ self.addEventListener('activate', (event) => {
         )
       )
       .then(() => self.clients.claim())
+      .then(() => notifyClients({ type: 'CACHE_READY' }))
   );
 });
 
@@ -89,7 +103,7 @@ self.addEventListener('message', (event) => {
     const urls = event.data.urls;
     event.waitUntil(
       caches.open(CACHE_NAME).then(async (cache) => {
-        await Promise.allSettled(
+        await Promise.all(
           urls.map(async (url) => {
             try {
               const matched = await cache.match(url);
@@ -104,6 +118,7 @@ self.addEventListener('message', (event) => {
             }
           })
         );
+        await notifyClients({ type: 'CACHE_READY' });
       })
     );
   }
@@ -118,8 +133,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Bỏ qua Vite HMR ping/websocket
-  if (request.url.includes('__vite_ping') || request.url.includes('?html-proxy')) {
+  // Bỏ qua Vite HMR ping/websocket và các file tải xuống dung lượng lớn (.apk, .zip)
+  if (
+    request.url.includes('__vite_ping') ||
+    request.url.includes('?html-proxy') ||
+    request.url.endsWith('.apk') ||
+    request.url.endsWith('.zip')
+  ) {
     return;
   }
 
@@ -152,19 +172,41 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
-        .then((networkResponse) => {
+        .then(async (networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
-            const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseClone);
-              cache.put('/', responseClone.clone());
-              cache.put('/index.html', responseClone.clone());
-            });
+            try {
+              const clone = networkResponse.clone();
+              const text = await clone.text();
+
+              // Nếu mạng trả về trang chờ của Cloud Run / AI Studio container, không lưu vào cache!
+              if (
+                text.includes('Please wait while your application starts') ||
+                text.includes('accounts.google.com')
+              ) {
+                const cache = await caches.open(CACHE_NAME);
+                const cachedGame =
+                  (await cache.match('/index.html')) || (await cache.match('/'));
+                if (cachedGame) {
+                  return cachedGame;
+                }
+                return networkResponse;
+              }
+
+              // Chỉ lưu cache khi là trang game thật
+              if (text.includes('Loạn 12 Sứ Quân') || text.includes('id="root"')) {
+                const cache = await caches.open(CACHE_NAME);
+                cache.put(request, networkResponse.clone());
+                cache.put('/', networkResponse.clone());
+                cache.put('/index.html', networkResponse.clone());
+              }
+            } catch {
+              // Bỏ qua lỗi clone
+            }
           }
           return networkResponse;
         })
         .catch(async () => {
-          // Khi tắt mạng (Offline), lập tức trả về trang HTML từ Cache
+          // Khi tắt mạng (Offline) hoặc server đang khởi động lại
           const cache = await caches.open(CACHE_NAME);
           const matchedExact = await cache.match(request);
           if (matchedExact) return matchedExact;
@@ -179,7 +221,7 @@ self.addEventListener('fetch', (event) => {
           if (matchedAny) return matchedAny;
 
           return new Response(
-            '<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Loạn 12 Sứ Quân</title></head><body style="background:#0c0a09;color:#fbbf24;font-family:sans-serif;text-align:center;padding:40px;"><h2>Loạn 12 Sứ Quân</h2><p>Vui lòng mở game 1 lần khi có mạng để hoàn tất tải dữ liệu Offline.</p></body></html>',
+            '<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Loạn 12 Sứ Quân</title></head><body style="background:#0c0a09;color:#fbbf24;font-family:sans-serif;text-align:center;padding:40px;"><h2>Loạn 12 Sứ Quân</h2><p>Đang tải ứng dụng...</p></body></html>',
             { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
           );
         })

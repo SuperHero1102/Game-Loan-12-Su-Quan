@@ -1,19 +1,22 @@
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { deviceOptimizer } from './services/deviceOptimizer';
 
-const ACTIVE_CACHE_NAME = 'loan-12-su-quan-v5';
+// Khởi chạy tự động nhận diện dòng điện thoại Android/iOS & tối ưu hiển thị ngầm
+deviceOptimizer.initSilentOptimization();
+
+const ACTIVE_CACHE_NAME = 'loan-12-su-quan-v8';
 
 /**
- * Tự động quét và nạp toàn bộ tài nguyên (JS/TSX modules, CSS, Ảnh 13 Sứ Quân, HTML, Fonts)
- * vào CacheStorage ngay từ lần mở đầu tiên, giúp người dùng tải 1 lần và dùng mãi mãi 100% Offline.
+ * Tự động quét và nạp ngầm toàn bộ tài nguyên (JS/TSX modules, CSS, Ảnh 13 Sứ Quân, HTML, Fonts)
+ * vào CacheStorage ngay sau khi menu chính đã mở, giúp người dùng vào game tức thì và dùng 100% Offline.
  */
 async function warmOfflineCache() {
   if (typeof window === 'undefined' || !('caches' in window)) return;
   if (!navigator.onLine) return;
 
   try {
-    // Xóa các cache cũ để tránh xung đột phiên bản module Vite
     const existingKeys = await window.caches.keys();
     await Promise.all(
       existingKeys.map((key) => {
@@ -26,27 +29,30 @@ async function warmOfflineCache() {
 
     const cache = await window.caches.open(ACTIVE_CACHE_NAME);
 
-    // Thu thập toàn bộ URL script, module, style, font, ảnh vừa tải trên trang
-    const perfEntries = performance
-      .getEntriesByType('resource')
-      .map((entry) => entry.name)
-      .filter(
-        (url) =>
-          url.startsWith(window.location.origin) &&
-          !url.includes('__vite_ping') &&
-          !url.includes('node_modules/.vite/deps_temp')
-      );
+    const perfEntries =
+      typeof performance !== 'undefined' && typeof performance.getEntriesByType === 'function'
+        ? performance
+            .getEntriesByType('resource')
+            .map((entry) => entry.name)
+            .filter(
+              (url) =>
+                url.startsWith(window.location.origin) &&
+                !url.includes('__vite_ping') &&
+                !url.includes('node_modules/.vite/deps_temp')
+            )
+        : [];
 
     const origin = window.location.origin;
     const coreUrls = [
       origin + '/',
       origin + '/index.html',
+      origin + '/legacy-bundle.css',
+      origin + '/legacy-bundle.js',
       origin + '/manifest.webmanifest',
       origin + '/apple-touch-icon.png',
       origin + '/app-logo.png',
       origin + '/campaign_map.png',
       origin + '/campaign_map.jpeg',
-      // Tất cả 13 thẻ tướng & nhân vật
       origin + '/assets/aistudio/IMG_2711_a7aea1e8.png',
       origin + '/assets/aistudio/image_e32a7cc1.png',
       origin + '/assets/aistudio/IMG_2715_e22f2946.png',
@@ -71,29 +77,50 @@ async function warmOfflineCache() {
 
     const allUrls = Array.from(new Set([...coreUrls, ...perfEntries]));
 
-    // Lưu vào CacheStorage trực tiếp
-    await Promise.allSettled(
+    await Promise.all(
       allUrls.map(async (url) => {
-        const existing = await cache.match(url);
-        if (!existing) {
-          const response = await fetch(url, { credentials: 'same-origin' });
-          if (response && response.status === 200) {
-            await cache.put(url, response.clone());
+        try {
+          const existing = await cache.match(url);
+          if (!existing) {
+            const response = await fetch(url, { credentials: 'same-origin' });
+            if (response && response.status === 200) {
+              await cache.put(url, response.clone());
+            }
           }
+        } catch {
+          // Ignore individual asset cache failure
         }
       })
     );
 
-    // Gửi danh sách cho Service Worker đồng bộ
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage({
         type: 'CACHE_URLS',
         urls: allUrls,
       });
     }
+
+    window.dispatchEvent(new CustomEvent('pwa-cache-ready'));
   } catch (err) {
     console.warn('[PWA] Pre-warm cache skipped:', err);
   }
+}
+
+function scheduleBackgroundWarmup() {
+  const run = () => {
+    void warmOfflineCache();
+  };
+  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+    (window as any).requestIdleCallback(run, { timeout: 2000 });
+  } else {
+    setTimeout(run, 600);
+  }
+}
+
+const rootElement = document.getElementById('root');
+if (rootElement && !(window as any).__APP_MOUNTED__) {
+  (window as any).__APP_MOUNTED__ = true;
+  createRoot(rootElement).render(<App />);
 }
 
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
@@ -101,18 +128,15 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
     navigator.serviceWorker
       .register('/sw.js', { scope: '/' })
       .then((reg) => {
-        if (reg.waiting) {
+        if (reg.waiting && !navigator.serviceWorker.controller) {
           reg.waiting.postMessage({ type: 'SKIP_WAITING' });
         }
-        // Quét và lưu toàn bộ tài nguyên sau khi trang tải xong
-        setTimeout(warmOfflineCache, 500);
-        setTimeout(warmOfflineCache, 2500);
+        scheduleBackgroundWarmup();
+        setTimeout(warmOfflineCache, 3000);
       })
       .catch(() => {
-        // Vẫn lưu vào CacheStorage kể cả khi SW đang khởi tạo
-        setTimeout(warmOfflineCache, 800);
+        scheduleBackgroundWarmup();
       });
   });
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
