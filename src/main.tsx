@@ -6,7 +6,7 @@ import { deviceOptimizer } from './services/deviceOptimizer';
 // Khởi chạy tự động nhận diện dòng điện thoại Android/iOS & tối ưu hiển thị ngầm
 deviceOptimizer.initSilentOptimization();
 
-const ACTIVE_CACHE_NAME = 'loan-12-su-quan-v8';
+const ACTIVE_CACHE_NAME = 'loan-12-su-quan-v9.2';
 
 /**
  * Tự động quét và nạp ngầm toàn bộ tài nguyên (JS/TSX modules, CSS, Ảnh 13 Sứ Quân, HTML, Fonts)
@@ -77,21 +77,26 @@ async function warmOfflineCache() {
 
     const allUrls = Array.from(new Set([...coreUrls, ...perfEntries]));
 
-    await Promise.all(
-      allUrls.map(async (url) => {
-        try {
-          const existing = await cache.match(url);
-          if (!existing) {
-            const response = await fetch(url, { credentials: 'same-origin' });
-            if (response && response.status === 200) {
-              await cache.put(url, response.clone());
+    // Nạp theo lô nhỏ (batch) 3 tài nguyên cùng lúc để không làm nghẽn kết nối WebKit trên iOS
+    const batchSize = 3;
+    for (let i = 0; i < allUrls.length; i += batchSize) {
+      const batch = allUrls.slice(i, i + batchSize);
+      await Promise.all(
+        batch.map(async (url) => {
+          try {
+            const existing = await cache.match(url);
+            if (!existing) {
+              const response = await fetch(url, { credentials: 'same-origin' });
+              if (response && response.status === 200) {
+                await cache.put(url, response.clone());
+              }
             }
+          } catch {
+            // Bỏ qua lỗi từng tài nguyên nếu mạng chậm
           }
-        } catch {
-          // Ignore individual asset cache failure
-        }
-      })
-    );
+        })
+      );
+    }
 
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage({
@@ -126,7 +131,7 @@ if (rootElement && !(window as any).__APP_MOUNTED__) {
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
-      .register('/sw.js', { scope: '/' })
+      .register('/sw.js?v=9.2.0', { scope: '/' })
       .then((reg) => {
         if (reg.waiting && !navigator.serviceWorker.controller) {
           reg.waiting.postMessage({ type: 'SKIP_WAITING' });

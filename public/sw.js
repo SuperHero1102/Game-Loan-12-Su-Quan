@@ -4,7 +4,7 @@
  * Toàn bộ mã nguồn, dữ liệu 13 Sứ Quân, hình ảnh, sa bàn chiến dịch và font chữ được lưu vĩnh viễn trong CacheStorage.
  */
 
-const CACHE_NAME = 'loan-12-su-quan-v8';
+const CACHE_NAME = 'loan-12-su-quan-v9.3';
 
 // Danh sách toàn bộ tài nguyên cốt lõi cần nạp vào bộ nhớ đệm
 const PRECACHE_ASSETS = [
@@ -99,6 +99,15 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   }
 
+  if (event.data.type === 'FORCE_CLEAN_RELOAD') {
+    event.waitUntil(
+      caches
+        .keys()
+        .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+        .then(() => self.skipWaiting())
+    );
+  }
+
   if (event.data.type === 'CACHE_URLS' && Array.isArray(event.data.urls)) {
     const urls = event.data.urls;
     event.waitUntil(
@@ -133,10 +142,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Bỏ qua Vite HMR ping/websocket và các file tải xuống dung lượng lớn (.apk, .zip)
+  // Bỏ qua Vite HMR ping/websocket, version.json và các file tải xuống dung lượng lớn (.apk, .zip)
   if (
     request.url.includes('__vite_ping') ||
     request.url.includes('?html-proxy') ||
+    request.url.includes('version.json') ||
     request.url.endsWith('.apk') ||
     request.url.endsWith('.zip')
   ) {
@@ -171,60 +181,59 @@ self.addEventListener('fetch', (event) => {
   // 2. Đối với yêu cầu điều hướng trang web (Navigation: mở app, tải lại trang)
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
-        .then(async (networkResponse) => {
+      (async () => {
+        const cache = await caches.open(CACHE_NAME);
+        const cachedGame =
+          (await cache.match('/index.html')) || (await cache.match('/'));
+
+        // Nếu thiết bị đang offline hoàn toàn: trả về bản cache ngay lập tức không cần đợi
+        if (typeof navigator !== 'undefined' && navigator.onLine === false && cachedGame) {
+          return cachedGame;
+        }
+
+        // Tạo yêu cầu mạng an toàn
+        const fetchPromise = fetch(request).then(async (networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             try {
               const clone = networkResponse.clone();
               const text = await clone.text();
 
-              // Nếu mạng trả về trang chờ của Cloud Run / AI Studio container, không lưu vào cache!
+              // Nếu mạng trả về trang chờ của Cloud Run / AI Studio container, trả về bản cached game
               if (
                 text.includes('Please wait while your application starts') ||
                 text.includes('accounts.google.com')
               ) {
-                const cache = await caches.open(CACHE_NAME);
-                const cachedGame =
-                  (await cache.match('/index.html')) || (await cache.match('/'));
-                if (cachedGame) {
-                  return cachedGame;
-                }
+                if (cachedGame) return cachedGame;
                 return networkResponse;
               }
 
               // Chỉ lưu cache khi là trang game thật
               if (text.includes('Loạn 12 Sứ Quân') || text.includes('id="root"')) {
-                const cache = await caches.open(CACHE_NAME);
                 cache.put(request, networkResponse.clone());
                 cache.put('/', networkResponse.clone());
                 cache.put('/index.html', networkResponse.clone());
               }
-            } catch {
-              // Bỏ qua lỗi clone
-            }
+            } catch {}
           }
           return networkResponse;
-        })
-        .catch(async () => {
-          // Khi tắt mạng (Offline) hoặc server đang khởi động lại
-          const cache = await caches.open(CACHE_NAME);
-          const matchedExact = await cache.match(request);
-          if (matchedExact) return matchedExact;
+        });
 
-          const matchedRoot = await cache.match('/');
-          if (matchedRoot) return matchedRoot;
+        if (!cachedGame) {
+          return fetchPromise.catch(() => {
+            return new Response(
+              '<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Loạn 12 Sứ Quân</title></head><body style="background:#291507;color:#fbbf24;font-family:sans-serif;text-align:center;padding:40px;"><h2>Loạn 12 Sứ Quân</h2><p>Đang kết nối...</p></body></html>',
+              { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+            );
+          });
+        }
 
-          const matchedIndex = await cache.match('/index.html');
-          if (matchedIndex) return matchedIndex;
+        // Đã có bản cache: chạy đua với mạng trong 1800ms để đảm bảo không bao giờ bị đơ/treo màn hình trắng trên iOS
+        const timeoutPromise = new Promise((resolve) =>
+          setTimeout(() => resolve(cachedGame), 1800)
+        );
 
-          const matchedAny = await cache.match(request, { ignoreSearch: true });
-          if (matchedAny) return matchedAny;
-
-          return new Response(
-            '<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Loạn 12 Sứ Quân</title></head><body style="background:#0c0a09;color:#fbbf24;font-family:sans-serif;text-align:center;padding:40px;"><h2>Loạn 12 Sứ Quân</h2><p>Đang tải ứng dụng...</p></body></html>',
-            { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-          );
-        })
+        return Promise.race([fetchPromise, timeoutPromise]).catch(() => cachedGame);
+      })()
     );
     return;
   }

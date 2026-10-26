@@ -96,7 +96,7 @@ export default function App() {
   const [settings, setSettings] = useState(() => loadSettings());
 
   // Trạng thái mạng, bộ nhớ đệm Offline & tự động cập nhật gói tin mới
-  const syncState = useOnlineSync();
+  const syncState = useOnlineSync(screen);
 
   // Active Battle Setup State
   const [p1Warlord, setP1Warlord] = useState<Warlord>(DINH_BO_LINH);

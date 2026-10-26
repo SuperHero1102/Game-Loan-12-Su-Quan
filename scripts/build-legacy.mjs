@@ -117,14 +117,32 @@ async function main() {
   fs.copyFileSync(builtJs, targetJs);
 
   // 2. Post-process CSS to flatten @layer, remove color-mix @supports, and convert any oklch() -> rgb()
-  const cssFiles = fs.readdirSync(outDir).filter((f) => f.endsWith('.css'));
+  function findCssFiles(dir) {
+    if (!fs.existsSync(dir)) return [];
+    let files = [];
+    for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, item.name);
+      if (item.isDirectory()) {
+        files.push(...findCssFiles(fullPath));
+      } else if (item.name.endsWith('.css')) {
+        files.push(fullPath);
+      }
+    }
+    return files;
+  }
+
+  const legacyCssFiles = findCssFiles(outDir);
   let css = '';
-  if (cssFiles.length > 0) {
-    css = fs.readFileSync(path.join(outDir, cssFiles[0]), 'utf8');
-  } else {
+  if (legacyCssFiles.length > 0) {
+    css = fs.readFileSync(legacyCssFiles[0], 'utf8');
+  } else if (fs.existsSync(path.resolve('dist/assets'))) {
     const distAssets = path.resolve('dist/assets');
     const distCss = fs.readdirSync(distAssets).filter((f) => f.endsWith('.css'));
-    css = fs.readFileSync(path.join(distAssets, distCss[0]), 'utf8');
+    if (distCss.length > 0) {
+      css = fs.readFileSync(path.join(distAssets, distCss[0]), 'utf8');
+    }
+  } else if (fs.existsSync(targetCss)) {
+    css = fs.readFileSync(targetCss, 'utf8');
   }
 
   css = css.replace(/@layer\s+[^{;]+;/g, '');

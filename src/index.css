@@ -120,14 +120,13 @@ h1, h2, h3, h4, .font-display {
   flex-shrink: 0;
 }
 
-/* Đế Đáy Hoàng Kim Đông Sơn Tràn Viền (Royal Bronze Bottom Dock - Xóa 100% dải đen đáy) */
+/* Đế Đáy Hoàng Kim Đông Sơn Tràn Viền (Royal Bronze Bottom Dock - Căn chỉnh chính giữa hoàn hảo) */
 .royal-bottom-dock {
   width: 100%;
-  padding-top: 0.55rem;
-  padding-bottom: 0.55rem;
-  padding-bottom: max(0.55rem, calc(env(safe-area-inset-bottom, 0px) + 0.15rem));
-  padding-left: 0.75rem;
-  padding-right: 0.75rem;
+  padding-top: max(0.65rem, 10px);
+  padding-bottom: max(0.65rem, calc(env(safe-area-inset-bottom, 0px) * 0.7 + 8px));
+  padding-left: 0.85rem;
+  padding-right: 0.85rem;
   background-color: #431b05;
   background: linear-gradient(0deg, #5c2608 0%, #431b05 55%, #2f1203 100%);
   border-top: 2px solid #fbbf24;
@@ -135,6 +134,11 @@ h1, h2, h3, h4, .font-display {
     inset 0 1px 0 rgba(254, 240, 138, 0.5);
   flex-shrink: 0;
   z-index: 30;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  box-sizing: border-box;
 }
 
 /* Khung Màn Hình Hộp Thoại Thương Mại Tràn Viền 100% (Không hở viền đen) */

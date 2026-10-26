@@ -919,6 +919,7 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
           turnTimerEnabled={localTurnTimerEnabled}
           timeLeft={timeLeft}
           onOpenTimerModal={() => setShowTimerModal(true)}
+          localRole={myP2PSide}
         />
       </div>
 
@@ -933,6 +934,7 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
           }}
           onSwapTiles={(r1, c1, r2, c2) => executeSwap(r1, c1, r2, c2)}
           isInteractable={isInteractable}
+          isMyTurn={isMyTurn}
           extraTurnAlert={extraTurnAlert}
           comboAlert={comboAlert}
         />

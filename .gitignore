@@ -1,7 +1,5 @@
 node_modules/
 build/
-dist/
-dist-legacy/
 coverage/
 .DS_Store
 *.log
@@ -10,6 +8,4 @@ coverage/
 .aistudio/
 *.zip
 *.apk
-
-
-
+dist-legacy/

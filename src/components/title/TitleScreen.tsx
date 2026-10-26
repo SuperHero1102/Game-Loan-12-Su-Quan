@@ -206,12 +206,14 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
       </div>
 
       {/* Đế Đáy Hoàng Kim Đông Sơn Tràn Viền */}
-      <div className="royal-bottom-dock flex items-center justify-between text-[10px] text-amber-200 font-bold tracking-wide whitespace-nowrap">
-        <span className="text-yellow-400">⚜️ ĐẠI CỒ VIỆT · 968</span>
-        <span className="text-amber-200/95 truncate px-2">
-          Phát triển bởi Gem Pro · Hải An Group
-        </span>
-        <span className="text-yellow-400">13 THẺ 3D ⚜️</span>
+      <div className="royal-bottom-dock">
+        <div className="w-full max-w-md mx-auto flex items-center justify-between text-[9px] sm:text-[10.5px] text-amber-200 font-bold tracking-tight sm:tracking-wide px-1">
+          <span className="text-yellow-400 shrink-0 whitespace-nowrap">⚜️ ĐẠI CỒ VIỆT</span>
+          <span className="text-amber-200/95 text-center px-1 whitespace-nowrap font-bold">
+            Phát triển bởi GemPro - Hải An Group
+          </span>
+          <span className="text-yellow-400 shrink-0 whitespace-nowrap">13 THẺ 3D ⚜️</span>
+        </div>
       </div>
 
       {/* MODAL CÀI ĐẶT THỜI GIAN ĐẾM NGƯỢC KHI ẤN ĐỒNG HỒ */}

@@ -20,6 +20,10 @@ import {
 } from 'lucide-react';
 import { OnlineSyncState } from '../../hooks/useOnlineSync';
 import { deviceOptimizer } from '../../services/deviceOptimizer';
+import {
+  getActiveGameUrl,
+  copyToClipboard,
+} from '../../utils/clipboard';
 
 interface NetworkBadgeProps {
   syncState: OnlineSyncState;
@@ -41,29 +45,26 @@ export const NetworkBadge: React.FC<NetworkBadgeProps> = ({ syncState }) => {
     isCheckingUpdate,
     checkForUpdate,
     applyUpdate,
+    forceCleanUpdate,
     cacheReady,
   } = syncState;
 
-  // Luôn ưu tiên lấy link chia sẻ công khai (ais-pre) thay vì link dev cá nhân (ais-dev)
-  const getPublicShareUrl = () => {
-    const defaultPublicUrl =
-      'https://ais-pre-s44nqpuehsdi6vvl5dctbh-830645281651.asia-east1.run.app';
-    if (typeof window === 'undefined') return defaultPublicUrl;
-    const current = window.location.origin + window.location.pathname;
-    if (current.includes('ais-dev-')) {
-      return current.replace('ais-dev-', 'ais-pre-');
-    }
-    if (current.startsWith('http')) {
-      return current;
-    }
-    return defaultPublicUrl;
-  };
+  // Lấy URL thực tế đang hoạt động của ứng dụng (tự động nhận diện domain hiện hành)
+  const currentAppUrl = getActiveGameUrl();
 
-  const handleCopyShareLink = () => {
-    const shareUrl = getPublicShareUrl();
-    navigator.clipboard.writeText(shareUrl).catch(() => {});
-    setCopiedPublicLink(true);
-    setTimeout(() => setCopiedPublicLink(false), 2500);
+  const handleCopyShareLink = async () => {
+    const success = await copyToClipboard(currentAppUrl);
+    if (success) {
+      setCopiedPublicLink(true);
+      setManualCheckMsg('Đã sao chép liên kết vào bộ nhớ tạm thành công!');
+      setTimeout(() => {
+        setCopiedPublicLink(false);
+        setManualCheckMsg(null);
+      }, 3500);
+    } else {
+      setManualCheckMsg('Nhấn giữ vào ô liên kết bên dưới để sao chép!');
+      setTimeout(() => setManualCheckMsg(null), 4000);
+    }
   };
 
   const handleAndroidApkDownload = async () => {
@@ -71,27 +72,19 @@ export const NetworkBadge: React.FC<NetworkBadgeProps> = ({ syncState }) => {
     const result = await deviceOptimizer.downloadAndInstallAndroidApk();
     if (result === 'installed') {
       setAndroidDownloadState('installed');
+      setManualCheckMsg('Đã cài đặt ứng dụng thành công lên điện thoại Android!');
+    } else {
+      setManualCheckMsg('Đang tải file Loan_12_Su_Quan.apk về thiết bị của bạn!');
     }
     setTimeout(() => {
       setAndroidDownloadState('idle');
-    }, 4000);
+      setManualCheckMsg(null);
+    }, 4500);
   };
 
   const handleManualCheck = async () => {
-    setManualCheckMsg(null);
-    const hasUpdate = await checkForUpdate();
-    if (hasUpdate) {
-      setManualCheckMsg(
-        'Đã phát hiện bản cập nhật mới! Bạn có thể cập nhật ngay bên dưới.'
-      );
-    } else {
-      setManualCheckMsg(
-        'Dữ liệu game hiện tại đã là phiên bản mới nhất, sẵn sàng chơi 100% offline.'
-      );
-    }
-    setTimeout(() => {
-      setManualCheckMsg(null);
-    }, 4500);
+    setManualCheckMsg('Đang nạp và áp dụng phiên bản mới nhất...');
+    await checkForUpdate(true);
   };
 
   return (
@@ -116,13 +109,7 @@ export const NetworkBadge: React.FC<NetworkBadgeProps> = ({ syncState }) => {
         )}
 
         <span className="tracking-wide">
-          {isCheckingUpdate
-            ? 'Đồng bộ...'
-            : isOnline
-            ? cacheReady
-              ? 'Online · Đã lưu Offline'
-              : 'Trực tuyến'
-            : 'Offline 100%'}
+          {isCheckingUpdate ? 'Đồng bộ...' : isOnline ? 'Online' : 'Offline'}
         </span>
 
         {updateAvailable && (
@@ -199,53 +186,77 @@ export const NetworkBadge: React.FC<NetworkBadgeProps> = ({ syncState }) => {
                   cài đặt APK trên điện thoại Android:
                 </p>
 
+                {/* Hiển thị công khai link chính thức của game kèm ô nhập chọn nhanh */}
+                <div className="flex items-center gap-1.5 p-1 rounded-lg bg-stone-950/90 border border-amber-500/70 shadow-inner">
+                  <input
+                    type="text"
+                    readOnly
+                    value={currentAppUrl}
+                    onFocus={(e) => e.target.select()}
+                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                    className="w-full bg-transparent px-2 py-1 text-[11px] font-mono text-amber-200 outline-none select-all truncate"
+                    title="Nhấp vào để chọn toàn bộ liên kết"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCopyShareLink}
+                    className="px-2.5 py-1 rounded bg-amber-500 hover:bg-yellow-400 active:scale-95 text-stone-950 font-black text-[11px] shrink-0 transition cursor-pointer flex items-center gap-1 shadow"
+                    title="Sao chép link này"
+                  >
+                    {copiedPublicLink ? (
+                      <Check className="w-3 h-3 text-stone-950" />
+                    ) : (
+                      <Copy className="w-3 h-3 text-stone-950" />
+                    )}
+                    <span>{copiedPublicLink ? 'Đã chép' : 'Chép'}</span>
+                  </button>
+                </div>
+
                 {/* Nút 1: Sao chép Link trực tiếp (iPhone) */}
                 <button
                   type="button"
                   onClick={handleCopyShareLink}
-                  className={`w-full py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow ${
+                  className={`w-full py-2.5 px-3 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-lg active:scale-95 ${
                     copiedPublicLink
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-stone-950'
+                      ? 'bg-emerald-600 text-white border border-emerald-400'
+                      : 'bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-stone-950 border border-yellow-200'
                   }`}
                 >
                   {copiedPublicLink ? (
                     <>
-                      <Check className="w-3.5 h-3.5 shrink-0" />
+                      <Check className="w-4 h-4 shrink-0" />
                       <span>Đã sao chép Link trực tiếp (iPhone)!</span>
                     </>
                   ) : (
                     <>
-                      <Copy className="w-3.5 h-3.5 shrink-0" />
+                      <Copy className="w-4 h-4 shrink-0" />
                       <span>Sao chép Link trực tiếp (iPhone)</span>
                     </>
                   )}
                 </button>
 
-                {/* Nút 2: Chỉ hiển thị trên điện thoại Android, đặt ngay dưới nút Sao chép Link trực tiếp (iPhone) */}
-                {isAndroidDevice && (
-                  <div className="space-y-1 pt-0.5">
-                    <button
-                      type="button"
-                      onClick={handleAndroidApkDownload}
-                      className="w-full py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-stone-950 active:scale-95"
-                    >
-                      <Download className="w-3.5 h-3.5 shrink-0" />
-                      <span>
-                        {androidDownloadState === 'downloading'
-                          ? 'Đang tải Loan_12_Su_Quan.apk...'
-                          : androidDownloadState === 'installed'
-                          ? 'Đã cài đặt cho điện thoại Android!'
-                          : 'Tải về cho điện thoại Android'}
-                      </span>
-                    </button>
-                    {androidDownloadState !== 'idle' && (
-                      <p className="text-[10px] text-emerald-300 text-center leading-snug">
-                        Đã tải gói cài đặt Loan_12_Su_Quan.apk về máy Android của bạn.
-                      </p>
-                    )}
-                  </div>
-                )}
+                {/* Nút 2: Tải gói cài đặt APK cho điện thoại Android */}
+                <div className="space-y-1 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleAndroidApkDownload}
+                    className="w-full py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600 hover:from-emerald-500 hover:to-teal-400 text-stone-950 active:scale-95 border border-emerald-300"
+                  >
+                    <Download className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      {androidDownloadState === 'downloading'
+                        ? 'Đang tải Loan_12_Su_Quan.apk...'
+                        : androidDownloadState === 'installed'
+                        ? 'Đã cài đặt cho điện thoại Android!'
+                        : 'Tải về APK cho điện thoại Android'}
+                    </span>
+                  </button>
+                  <p className="text-[10px] text-stone-400 text-center leading-snug">
+                    {androidDownloadState !== 'idle'
+                      ? 'Đang gửi tệp cài đặt Loan_12_Su_Quan.apk về máy Android của bạn.'
+                      : 'Hỗ trợ tất cả dòng máy Samsung, Xiaomi, OPPO, Pixel...'}
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -287,9 +298,9 @@ export const NetworkBadge: React.FC<NetworkBadgeProps> = ({ syncState }) => {
                 type="button"
                 onClick={handleManualCheck}
                 disabled={!isOnline || isCheckingUpdate}
-                className={`w-full py-2.5 px-4 rounded-xl border font-semibold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                className={`w-full py-2.5 px-4 rounded-xl border font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
                   isOnline && !isCheckingUpdate
-                    ? 'bg-amber-900/50 hover:bg-amber-800/60 border-amber-600 text-amber-200 active:scale-95'
+                    ? 'bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-stone-950 border-2 border-yellow-200 shadow-lg active:scale-95'
                     : 'bg-stone-900/60 border-stone-700 text-stone-500 cursor-not-allowed'
                 }`}
               >
@@ -298,9 +309,9 @@ export const NetworkBadge: React.FC<NetworkBadgeProps> = ({ syncState }) => {
                 />
                 <span>
                   {isCheckingUpdate
-                    ? 'Đang kiểm tra gói tin...'
+                    ? 'Đang cập nhật phiên bản mới...'
                     : isOnline
-                    ? 'Kiểm tra bản cập nhật mới'
+                    ? 'Kiểm tra & Cập nhật bản mới ngay'
                     : 'Đang Offline (Tự động cập nhật khi có mạng)'}
                 </span>
               </button>

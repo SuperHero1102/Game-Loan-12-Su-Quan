@@ -190,45 +190,32 @@
       </div>
     </div>
     <script>
-      // Tự động nhận diện máy Android đời cũ (Samsung J7 SM-J700H Android 6.0.1, SM-J710, Android 5/6/7/8/9)
-      // để nạp thẳng gói Classic IIFE 1 tệp (/legacy-bundle.js) không cần <script type="module">
+      // Nhận diện thiết bị cũ không hỗ trợ ES Module (<script type="module">) để nạp gói Classic IIFE
       (function () {
         var ua = (navigator.userAgent || '').toLowerCase();
+        var supportsModule = 'noModule' in HTMLScriptElement.prototype;
         var isLegacyAndroid =
-          /android\s+[456789]/.test(ua) ||
-          ua.indexOf('sm-j') !== -1 ||
-          ua.indexOf('sm-g5') !== -1 ||
-          ua.indexOf('sm-g6') !== -1 ||
-          ua.indexOf('gt-') !== -1;
+          (!supportsModule) ||
+          (/android\s+[456]/.test(ua) && ua.indexOf('chrome') !== -1 && (function() {
+            var m = ua.match(/chrome\/([0-9]+)/);
+            return m ? parseInt(m[1], 10) < 65 : false;
+          })());
 
-        var chromeMatch = ua.match(/chrome\/([0-9]+)/);
-        var chromeVer = chromeMatch ? parseInt(chromeMatch[1], 10) : 999;
-        if (chromeVer < 85) {
-          isLegacyAndroid = true;
-        }
-
-        function loadClassicBundle() {
-          if (window.__APP_MOUNTED__ || window.__LEGACY_LOADING__) return;
-          window.__LEGACY_LOADING__ = true;
+        if (isLegacyAndroid) {
+          window.__LEGACY_MODE__ = true;
           var s = document.createElement('script');
-          s.src = '/legacy-bundle.js?v=8';
+          s.src = '/legacy-bundle.js?v=9';
           s.defer = false;
           document.body.appendChild(s);
         }
-
-        if (isLegacyAndroid) {
-          loadClassicBundle();
-        } else {
-          // Watchdog dự phòng: nếu sau 1400ms mà ES Module chưa mount xong thì tự động kích hoạt bản Classic
-          setTimeout(function () {
-            if (!window.__APP_MOUNTED__) {
-              loadClassicBundle();
-            }
-          }, 1400);
-        }
       })();
     </script>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module">
+      // Khởi chạy an toàn trên iOS Safari và các trình duyệt hiện đại
+      if (!window.__LEGACY_MODE__) {
+        import('/src/main.tsx');
+      }
+    </script>
   </body>
 </html>
 

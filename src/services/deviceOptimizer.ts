@@ -191,22 +191,7 @@ class DeviceOptimizerService {
    * Kích hoạt tải file APK kết hợp cài đặt nhanh WebAPK trên Android
    */
   public async downloadAndInstallAndroidApk(): Promise<'installed' | 'downloaded'> {
-    // 1. Tải trực tiếp file Loan_12_Su_Quan.apk về máy Android
-    if (typeof document !== 'undefined') {
-      const link = document.createElement('a');
-      link.href = '/Loan_12_Su_Quan.apk';
-      link.setAttribute('download', 'Loan_12_Su_Quan.apk');
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      setTimeout(() => {
-        try {
-          document.body.removeChild(link);
-        } catch {}
-      }, 500);
-    }
-
-    // 2. Nếu trình duyệt Android hỗ trợ cài đặt WebAPK trực tiếp, bật hộp thoại cài đặt nhanh
+    // 1. Thử gọi WebAPK prompt nếu có sẵn trên trình duyệt Android
     if (this.deferredInstallPrompt) {
       try {
         await this.deferredInstallPrompt.prompt();
@@ -216,7 +201,45 @@ class DeviceOptimizerService {
           return 'installed';
         }
       } catch {
-        // Bỏ qua nếu người dùng đóng prompt
+        // Bỏ qua nếu người dùng hủy
+      }
+    }
+
+    // 2. Kích hoạt tải trực tiếp file Loan_12_Su_Quan.apk chuẩn Android
+    if (typeof document !== 'undefined') {
+      try {
+        const res = await fetch('/Loan_12_Su_Quan.apk');
+        if (res.ok) {
+          const blob = await res.blob();
+          const apkBlob = new Blob([blob], { type: 'application/vnd.android.package-archive' });
+          const blobUrl = URL.createObjectURL(apkBlob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.setAttribute('download', 'Loan_12_Su_Quan.apk');
+          link.style.display = 'none';
+          document.body.appendChild(link);
+          link.click();
+          setTimeout(() => {
+            try {
+              document.body.removeChild(link);
+              URL.revokeObjectURL(blobUrl);
+            } catch {}
+          }, 3000);
+          return 'downloaded';
+        }
+      } catch {
+        // Fallback tải trực tiếp qua liên kết tĩnh
+        const link = document.createElement('a');
+        link.href = '/Loan_12_Su_Quan.apk';
+        link.setAttribute('download', 'Loan_12_Su_Quan.apk');
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          try {
+            document.body.removeChild(link);
+          } catch {}
+        }, 800);
       }
     }
 
