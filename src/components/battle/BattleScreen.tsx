@@ -17,6 +17,7 @@ import {
   areAdjacent,
   GRID_ROWS,
   GRID_COLS,
+  BoardVfx,
 } from '../../game/match3Engine';
 import { BattleStage2D } from './BattleStage2D';
 import { Match3Board } from './Match3Board';
@@ -40,6 +41,7 @@ interface BattleScreenProps {
   bonusDef: number;
   bonusHp: number;
   bonusArmor?: number;
+  prestigeLevel?: number;
   onVictory: (goldEarned: number, defeatedWarlordId: string, nextStageNumber?: number) => void;
   onDefeat: () => void;
   onBackToMap: () => void;
@@ -59,10 +61,12 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
   pveDifficulty = 'MEDIUM',
   p2pBoardSeed,
   p2pIsHost = true,
+  playerLevel,
   bonusAtk,
   bonusDef,
   bonusHp,
   bonusArmor = 0,
+  prestigeLevel = 0,
   onVictory,
   onDefeat,
   onBackToMap,
@@ -113,15 +117,16 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
     if (gameMode === 'CAMPAIGN') {
       const stage = Math.max(1, Math.min(12, stageNumber || p2Warlord.stageNumber || 1));
       const progress = (stage - 1) / 11; // 0.0 ở Ải 1 -> 1.0 ở Ải 12
+      const prestigeScale = 1 + (prestigeLevel || 0) * 0.35;
       return {
-        aggressiveness: Number((0.35 + progress * 0.60).toFixed(2)),
-        skillChance: stage <= 2 ? 0.45 : stage <= 5 ? 0.72 : 1.0,
-        dmgMultiplier: Number((0.85 + progress * 0.32).toFixed(2)),
-        statScale: Number((0.90 + progress * 0.25).toFixed(2)),
+        aggressiveness: Number(Math.min(1.0, 0.35 + progress * 0.60 + (prestigeLevel || 0) * 0.08).toFixed(2)),
+        skillChance: stage <= 2 && !prestigeLevel ? 0.45 : stage <= 5 ? 0.72 : 1.0,
+        dmgMultiplier: Number(((0.85 + progress * 0.32) * (1 + (prestigeLevel || 0) * 0.25)).toFixed(2)),
+        statScale: Number(((0.90 + progress * 0.25) * prestigeScale).toFixed(2)),
       };
     }
     return { aggressiveness: 0.7, skillChance: 1.0, dmgMultiplier: 1.0, statScale: 1.0 };
-  }, [gameMode, pveDifficulty, stageNumber, p2Warlord.stageNumber]);
+  }, [gameMode, pveDifficulty, stageNumber, p2Warlord.stageNumber, prestigeLevel]);
 
   const diffTuning = getDifficultyTuning();
 
@@ -252,7 +257,8 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
   const [slashTarget, setSlashTarget] = useState<'p1' | 'p2' | null>(null);
   const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
   const [extraTurnAlert, setExtraTurnAlert] = useState(false);
-  const [comboAlert] = useState(0);
+  const [comboAlert, setComboAlert] = useState(0);
+  const [boardVfx, setBoardVfx] = useState<BoardVfx[]>([]);
 
   // Keypad & D-Pad State
   const [dpadCursor, setDpadCursor] = useState<{ r: number; c: number }>({ r: 3, c: 3 });
@@ -285,6 +291,9 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
     setLocalTurnTimerEnabled(enabled);
     setLocalTimeLimit(newLimit);
     setTimeLeft(newLimit);
+    if (gameMode === 'PVP_P2P' && p2pIsHost) {
+      p2pService.send({ type: 'TIMER_SYNC', enabled, timeLimit: newLimit });
+    }
     if (onUpdateTurnTimer) {
       onUpdateTurnTimer(enabled, newLimit);
     }
@@ -376,7 +385,7 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
       const currentBoard = boardRef.current;
       const isValid = testSwapCreatesMatch(currentBoard, r1, c1, r2, c2);
       if (!isValid) {
-        soundEngine.playSwordHit();
+        soundEngine.playInvalidMove();
         setSelectedCoord(null);
         return;
       }
@@ -397,14 +406,27 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
 
       // Clone and swap
       const tempBoard = currentBoard.map((row) => row.map((t) => ({ ...t })));
-      const t1 = tempBoard[r1][c1];
-      const t2 = tempBoard[r2][c2];
-      tempBoard[r1][c1] = { ...t2, row: r1, col: c1 };
-      tempBoard[r2][c2] = { ...t1, row: r2, col: c2 };
+      const t1 = tempBoard[r1]?.[c1];
+      const t2 = tempBoard[r2]?.[c2];
+      if (t1 && t2 && (r1 !== r2 || c1 !== c2)) {
+        tempBoard[r1][c1] = { ...t2, row: r1, col: c1 };
+        tempBoard[r2][c2] = { ...t1, row: r2, col: c2 };
+      }
 
-      // Resolve matches and gravity cascade with deterministic moveSeed
-      const result = resolveCascade(tempBoard, moveSeed);
+      // Resolve matches and gravity cascade with deterministic moveSeed and swapContext
+      const result = resolveCascade(tempBoard, moveSeed, { r1, c1, r2, c2 });
       setBoard(result.newBoard);
+
+      if (result.vfxEvents && result.vfxEvents.length > 0) {
+        setBoardVfx(result.vfxEvents);
+        const hasLightning = result.vfxEvents.some((v) => v.type === 'lightning');
+        if (hasLightning) {
+          soundEngine.playThunderExtraTurn();
+        }
+        safeTimeout(() => {
+          setBoardVfx([]);
+        }, 750);
+      }
 
       const turnSide = currentTurnRef.current;
       const nextP1 = { ...player1Ref.current };
@@ -428,11 +450,18 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
         const isSpeedCrit = critRoll < speedCritChance;
         const isBloodCrit = result.hasBloodSwordCrit || isSpeedCrit;
 
-        if (isBloodCrit) {
-          soundEngine.playBloodSwordSlash();
-        } else {
-          soundEngine.playSwordHit(result.totalSwords >= 4);
-        }
+        // Tiếng vó ngựa chiến dồn dập khi phi sang tấn công
+        soundEngine.playHorseGallop();
+
+        // Âm thanh xuất chiêu vũ khí theo chủng loại (Kiếm, Đao, Thương, Chùy, Cung)
+        safeTimeout(() => {
+          if (isBloodCrit) {
+            soundEngine.playBloodSwordSlash();
+            soundEngine.playWeaponClash();
+          } else {
+            soundEngine.playWeaponAttack(activeFighter.weaponVisual);
+          }
+        }, 55);
 
         setSlashActive(true);
         setSlashTarget(targetSide);
@@ -461,7 +490,6 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
         const armorPierceRatio =
           activeFighter.id === 'ly_khue' ? 0.45 : isBloodCrit ? 0.5 : 0.85;
 
-        soundEngine.playHurt();
         let remainDmg = rawDamage;
         let newArmor = defenderFighter.armor;
 
@@ -470,10 +498,17 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
         }
 
         if (newArmor > 0) {
+          // Va vào giáp sắt / khiên đồng: phát ra tiếng đinggg kim khí đanh thép
+          soundEngine.playArmorDeflect();
           const absorbCap = Math.round(newArmor * armorPierceRatio);
           const absorbed = Math.min(absorbCap, remainDmg);
           newArmor -= absorbed;
           remainDmg -= absorbed;
+          if (remainDmg > 0) {
+            safeTimeout(() => soundEngine.playHurt(), 100);
+          }
+        } else {
+          soundEngine.playHurt();
         }
 
         defenderFighter.armor = newArmor;
@@ -553,6 +588,13 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
           'heal',
           turnSide
         );
+      }
+
+      // Combo cascade audio & alert khi nổ chuỗi liên hoàn
+      if (result.comboCount > 1) {
+        soundEngine.playComboCascade(result.comboCount);
+        setComboAlert(result.comboCount);
+        safeTimeout(() => setComboAlert(0), 1200);
       }
 
       // Cập nhật state 1 lần duy nhất, tinh khiết (không lồng side-effect trong setState)
@@ -636,6 +678,26 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
       }
 
       soundEngine.playSkillCast();
+      safeTimeout(() => {
+        soundEngine.playWeaponAttack(casterFighter.weaponVisual);
+        soundEngine.playWeaponClash();
+      }, 120);
+
+      // Hiệu ứng bông tuyết vàng & bụi hoàng kim bay tóe tung khi Hoàng Đế Đinh Tiên Hoàng ra chiêu
+      if (casterFighter.id === 'dinh_tien_hoang') {
+        try {
+          const count = deviceOptimizer.getOptimalParticleCount(90);
+          confetti({
+            particleCount: count,
+            spread: 120,
+            origin: { y: 0.45 },
+            colors: ['#fbbf24', '#fef08a', '#ffd700', '#ffffff', '#f59e0b', '#d97706'],
+          });
+        } catch {
+          // Bỏ qua nếu canvas bị chặn
+        }
+      }
+
       setSlashActive(true);
       setSlashTarget(caster === 'p1' ? 'p2' : 'p1');
       safeTimeout(() => setSlashActive(false), 620);
@@ -736,6 +798,16 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
       } else if (msg.type === 'SURRENDER') {
         const loser = msg.side || (p2pIsHost ? 'p2' : 'p1');
         setWinner(loser === 'p1' ? 'p2' : 'p1');
+      } else if (msg.type === 'TIMER_SYNC') {
+        setLocalTurnTimerEnabled(msg.enabled);
+        setLocalTimeLimit(msg.timeLimit);
+        setTimeLeft(msg.timeLimit);
+        soundEngine.playBronzeGong();
+        addFloatingText(
+          `⏱️ Chủ phòng chỉnh thời gian: ${msg.enabled ? msg.timeLimit + 's' : 'Vô hạn'}`,
+          'skill',
+          'p1'
+        );
       }
     });
 
@@ -811,10 +883,15 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
       ? currentTurn === 'p1'
       : gameMode === 'PVP_P2P'
       ? currentTurn === myP2PSide
-      : true;
+      : currentTurn === 'p1';
 
   const isInteractable =
-    isMyTurn && !isResolving && !isAiThinking && !winner && player1.hp > 0 && player2.hp > 0;
+    (gameMode === 'PVP_HOTSEAT' || isMyTurn) &&
+    !isResolving &&
+    !isAiThinking &&
+    !winner &&
+    player1.hp > 0 &&
+    player2.hp > 0;
 
   const activeSkillFighter =
     gameMode === 'PVP_P2P'
@@ -879,16 +956,27 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
             🏳️ Hàng
           </button>
 
-          {/* NÚT BIỂU TƯỢNG ĐỒNG HỒ: MỞ FORM CÀI ĐẶT THỜI GIAN ĐẾM NGƯỢC */}
+          {/* NÚT BIỂU TƯỢNG ĐỒNG HỒ: CHỈ CHỦ PHÒNG MỚI ĐƯỢC CÀI ĐẶT THỜI GIAN TRONG PVP 2 MÁY */}
           <button
             type="button"
-            onClick={() => setShowTimerModal(true)}
+            onClick={() => {
+              if (gameMode === 'PVP_P2P' && !p2pIsHost) {
+                soundEngine.playInvalidMove();
+                addFloatingText('🔒 Chỉ Chủ Phòng mới có quyền cài đặt thời gian!', 'damage', 'p2');
+                return;
+              }
+              setShowTimerModal(true);
+            }}
             className={`px-2 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1 shadow ${
               localTurnTimerEnabled
                 ? 'bg-amber-950/95 text-yellow-300 border-yellow-400/90 ring-1 ring-yellow-400/50'
                 : 'bg-amber-950/70 text-amber-200 border-amber-600/70'
             }`}
-            title="Nhấn để cài đặt thời gian đếm ngược mỗi lượt"
+            title={
+              gameMode === 'PVP_P2P' && !p2pIsHost
+                ? 'Thời gian do Chủ Phòng thiết lập'
+                : 'Nhấn để cài đặt thời gian đếm ngược mỗi lượt'
+            }
           >
             <Clock className={`w-3.5 h-3.5 ${localTurnTimerEnabled ? 'text-yellow-400 animate-pulse' : 'text-amber-400'}`} />
             <span className="font-mono">{localTurnTimerEnabled ? `${localTimeLimit}s` : '∞'}</span>
@@ -918,7 +1006,14 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
           gameMode={gameMode}
           turnTimerEnabled={localTurnTimerEnabled}
           timeLeft={timeLeft}
-          onOpenTimerModal={() => setShowTimerModal(true)}
+          onOpenTimerModal={() => {
+            if (gameMode === 'PVP_P2P' && !p2pIsHost) {
+              soundEngine.playInvalidMove();
+              addFloatingText('🔒 Chỉ Chủ Phòng mới có quyền cài đặt thời gian!', 'damage', 'p2');
+              return;
+            }
+            setShowTimerModal(true);
+          }}
           localRole={myP2PSide}
         />
       </div>
@@ -937,6 +1032,8 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
           isMyTurn={isMyTurn}
           extraTurnAlert={extraTurnAlert}
           comboAlert={comboAlert}
+          gameMode={gameMode}
+          vfxEvents={boardVfx}
         />
       </div>
 
@@ -975,47 +1072,58 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
                     : `Chúc mừng ${winner === 'p1' ? player1.name : player2.name} đã giành chiến thắng thuyết phục!`}
                 </p>
 
-                <div className="mt-4 p-3 bg-stone-950 rounded-xl border border-amber-900/60 flex items-center justify-around text-xs">
-                  <div>
-                    <span className="text-stone-400 block text-[10px]">Tiền Vàng</span>
-                    <strong className="text-yellow-400 font-bold">+{player1.goldEarnedThisMatch + 180} 🪙</strong>
-                  </div>
-                  <div>
-                    <span className="text-stone-400 block text-[10px]">Kinh Nghiệm</span>
-                    <strong className="text-emerald-400 font-bold">+100 EXP</strong>
-                  </div>
-                </div>
+                {(() => {
+                  const goldMult = 1 + (prestigeLevel || 0) * 0.5;
+                  const totalVictoryGold = Math.round((player1.goldEarnedThisMatch + 180) * goldMult);
 
-                <div className="mt-4 space-y-2">
-                  {gameMode === 'CAMPAIGN' && stageNumber && stageNumber < 12 ? (
-                    <button
-                      type="button"
-                      onClick={() => onVictory(player1.goldEarnedThisMatch + 180, p2Warlord.id, stageNumber + 1)}
-                      className="w-full py-3 bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 text-stone-950 font-black text-xs sm:text-sm rounded-xl uppercase tracking-wider shadow-lg active:scale-95 transition flex items-center justify-center gap-1.5"
-                    >
-                      <FastForward className="w-4 h-4 fill-stone-950" />
-                      <span>QUA ẢI TIẾP THEO (ẢI {stageNumber + 1})</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => onVictory(player1.goldEarnedThisMatch + 180, p2Warlord.id)}
-                      className="w-full py-3 bg-gradient-to-r from-amber-600 to-yellow-500 text-stone-950 font-black text-xs sm:text-sm rounded-xl uppercase tracking-wider shadow-lg active:scale-95 transition"
-                    >
-                      TIẾP TỤC HÀNH QUÂN
-                    </button>
-                  )}
+                  return (
+                    <>
+                      <div className="mt-4 p-3 bg-stone-950 rounded-xl border border-amber-900/60 flex items-center justify-around text-xs">
+                        <div>
+                          <span className="text-stone-400 block text-[10px]">Tiền Vàng</span>
+                          <strong className="text-yellow-400 font-bold">
+                            +{totalVictoryGold} 🪙 {prestigeLevel > 0 && <span className="text-[10px] text-amber-300">(x{goldMult} NG+)</span>}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-stone-400 block text-[10px]">Kinh Nghiệm</span>
+                          <strong className="text-emerald-400 font-bold">+100 EXP</strong>
+                        </div>
+                      </div>
 
-                  <button
-                    type="button"
-                    onClick={() => onVictory(player1.goldEarnedThisMatch + 180, p2Warlord.id)}
-                    className="w-full py-2.5 bg-stone-950 hover:bg-stone-800 text-amber-200 border border-amber-800/60 text-xs rounded-xl font-bold cursor-pointer active:scale-95 transition"
-                  >
-                    {gameMode === 'CAMPAIGN' && stageNumber && stageNumber < 12
-                      ? `VỀ BẢN ĐỒ HÀNH QUÂN (ĐÃ MỞ KHÓA ẢI ${stageNumber + 1})`
-                      : 'VỀ BẢN ĐỒ HÀNH QUÂN'}
-                  </button>
-                </div>
+                      <div className="mt-4 space-y-2">
+                        {gameMode === 'CAMPAIGN' && stageNumber && stageNumber < 12 ? (
+                          <button
+                            type="button"
+                            onClick={() => onVictory(totalVictoryGold, p2Warlord.id, stageNumber + 1)}
+                            className="w-full py-3 bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 text-stone-950 font-black text-xs sm:text-sm rounded-xl uppercase tracking-wider shadow-lg active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <FastForward className="w-4 h-4 fill-stone-950" />
+                            <span>QUA ẢI TIẾP THEO (ẢI {stageNumber + 1})</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onVictory(totalVictoryGold, p2Warlord.id)}
+                            className="w-full py-3 bg-gradient-to-r from-amber-600 to-yellow-500 text-stone-950 font-black text-xs sm:text-sm rounded-xl uppercase tracking-wider shadow-lg active:scale-95 transition cursor-pointer"
+                          >
+                            TIẾP TỤC HÀNH QUÂN
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => onVictory(totalVictoryGold, p2Warlord.id)}
+                          className="w-full py-2.5 bg-stone-950 hover:bg-stone-800 text-amber-200 border border-amber-800/60 text-xs rounded-xl font-bold cursor-pointer active:scale-95 transition"
+                        >
+                          {gameMode === 'CAMPAIGN' && stageNumber && stageNumber < 12
+                            ? `VỀ BẢN ĐỒ HÀNH QUÂN (ĐÃ MỞ KHÓA ẢI ${stageNumber + 1})`
+                            : 'VỀ BẢN ĐỒ HÀNH QUÂN'}
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()}
               </>
             ) : (
               <>

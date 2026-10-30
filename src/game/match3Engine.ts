@@ -25,6 +25,15 @@ export interface MatchGroup {
   createsBloodSword?: boolean;
 }
 
+export interface BoardVfx {
+  id: string;
+  r: number;
+  c: number;
+  type: 'explosion' | 'lightning' | 'slash' | 'burst';
+  tileType: TileType;
+  isSpecial?: boolean;
+}
+
 export interface MatchTurnResult {
   newBoard: Tile[][];
   totalSwords: number;
@@ -39,6 +48,7 @@ export interface MatchTurnResult {
   extraTurn: boolean;
   clearedTileCount: number;
   specialExplosions: number;
+  vfxEvents: BoardVfx[];
 }
 
 let nextTileId = 1;
@@ -199,7 +209,7 @@ export const hasAnyValidMoves = (board: Tile[][]): boolean => {
   return false;
 };
 
-// Helper: simulate swap and check for matches
+// Helper: simulate swap and check for matches or special activations
 export const testSwapCreatesMatch = (
   board: Tile[][],
   r1: number,
@@ -219,21 +229,48 @@ export const testSwapCreatesMatch = (
   ) {
     return false;
   }
-  const temp = board.map((row) => [...row]);
-  const t1 = temp[r1][c1];
-  const t2 = temp[r2][c2];
+  const t1 = board[r1]?.[c1];
+  const t2 = board[r2]?.[c2];
   if (!t1 || !t2) return false;
 
+  // 1. Kích hoạt trực tiếp ngọc đặc biệt (BOMB_4 hoặc LIGHTNING_5)
+  // Khi người chơi hoán đổi ngọc đặc biệt với bất kỳ ô lân cận nào
+  // hoặc khi chạm/click trực tiếp vào ô đặc biệt (r1 === r2 && c1 === c2)
+  if (t1.special !== 'NORMAL' || t2.special !== 'NORMAL') {
+    return true;
+  }
+
+  // 2. Nếu người chơi ấn/gạt 2 ô cùng loại nằm trong dãy đã có sẵn từ 3 ô trở lên (ví dụ dãy 5-6 ô trên bàn cờ):
+  if (t1.type === t2.type) {
+    const existing = findMatches(board);
+    const inMatch = existing.some((g) =>
+      g.tiles.some(
+        (tc) => (tc.row === r1 && tc.col === c1) || (tc.row === r2 && tc.col === c2)
+      )
+    );
+    if (inMatch) return true;
+  }
+
+  // 3. Hoán đổi thông thường và kiểm tra tạo thành dãy ăn >= 3
+  const temp = board.map((row) => [...row]);
   temp[r1][c1] = { ...t2, row: r1, col: c1 };
   temp[r2][c2] = { ...t1, row: r2, col: c2 };
 
   return findMatches(temp).length > 0;
 };
 
+export interface SwapContext {
+  r1: number;
+  c1: number;
+  r2: number;
+  c2: number;
+}
+
 // Execute full match, Blood Sword check, and cascade resolution
 export const resolveCascade = (
   initialBoard: Tile[][],
-  seed?: number
+  seed?: number,
+  swapCtx?: SwapContext
 ): MatchTurnResult => {
   const rng = createSeededRng(seed);
   let currentBoard = initialBoard.map((row) => row.map((t) => ({ ...t })));
@@ -248,9 +285,196 @@ export const resolveCascade = (
   let extraTurn = false;
   let clearedTileCount = 0;
   let specialExplosions = 0;
+  const harvestedCoords = new Set<string>();
+  const vfxEvents: BoardVfx[] = [];
+
+  // Hàm cộng điểm/tài nguyên chuẩn xác cho từng ô bị tiêu diệt
+  const harvestTile = (t: Tile) => {
+    const key = `${t.row},${t.col}_${t.id}`;
+    if (harvestedCoords.has(key)) return;
+    harvestedCoords.add(key);
+
+    if (t.type === 'SWORD') {
+      totalSwords++;
+      if (t.isBloodSword) {
+        bloodSwordsMatched++;
+      }
+    } else if (t.type === 'HEART') {
+      totalHearts++;
+    } else if (t.type === 'GOLD') {
+      totalGold += 10;
+    } else if (t.type === 'CHUNG_CAKE') {
+      totalChungCakes++;
+    } else if (t.type === 'YIN_YANG') {
+      totalYinYang += 15;
+    } else if (t.type === 'ELIXIR') {
+      totalElixirs++;
+    }
+  };
+
+  // Kiểm tra kích hoạt đặc biệt ngay tại nước đi ban đầu (Swap Trigger)
+  let initialSpecialTriggered = false;
+  if (swapCtx) {
+    const { r1, c1, r2, c2 } = swapCtx;
+    const tileA = currentBoard[r1]?.[c1];
+    const tileB = currentBoard[r2]?.[c2];
+
+    if (tileA && tileB && (tileA.special !== 'NORMAL' || tileB.special !== 'NORMAL')) {
+      initialSpecialTriggered = true;
+      const initialRemoval = new Set<string>();
+
+      // Sét 5 viên (LIGHTNING_5): Quét toàn bộ loại ngọc mục tiêu hoặc quét chữ thập hàng ngang + hàng dọc
+      if (tileA.special === 'LIGHTNING_5' || tileB.special === 'LIGHTNING_5') {
+        specialExplosions++;
+        extraTurn = true;
+        const targetType =
+          tileA.special === 'LIGHTNING_5'
+            ? tileB.special === 'LIGHTNING_5'
+              ? null
+              : tileB.type
+            : tileA.type;
+
+        const lRow = tileA.special === 'LIGHTNING_5' ? r1 : r2;
+        const lCol = tileA.special === 'LIGHTNING_5' ? c1 : c2;
+
+        vfxEvents.push({
+          id: `vfx_init_lightning_${lRow}_${lCol}_${vfxEvents.length}`,
+          r: lRow,
+          c: lCol,
+          type: 'lightning',
+          tileType: targetType || 'YIN_YANG',
+          isSpecial: true,
+        });
+
+        if (targetType) {
+          // Quét toàn bộ các ô cùng loại trên bàn cờ
+          for (let r = 0; r < GRID_ROWS; r++) {
+            for (let c = 0; c < GRID_COLS; c++) {
+              if (currentBoard[r][c].type === targetType) {
+                initialRemoval.add(`${r},${c}`);
+                vfxEvents.push({
+                  id: `vfx_target_lightning_${r}_${c}_${vfxEvents.length}`,
+                  r,
+                  c,
+                  type: 'lightning',
+                  tileType: targetType,
+                  isSpecial: false,
+                });
+              }
+            }
+          }
+        }
+        // Kèm theo quét hàng và cột của vị trí sấm sét
+        for (let nc = 0; nc < GRID_COLS; nc++) {
+          initialRemoval.add(`${lRow},${nc}`);
+          if (nc % 2 === 0) {
+            vfxEvents.push({
+              id: `vfx_row_lightning_${lRow}_${nc}_${vfxEvents.length}`,
+              r: lRow,
+              c: nc,
+              type: 'lightning',
+              tileType: 'YIN_YANG',
+              isSpecial: true,
+            });
+          }
+        }
+        for (let nr = 0; nr < GRID_ROWS; nr++) {
+          initialRemoval.add(`${nr},${lCol}`);
+          if (nr % 2 === 0) {
+            vfxEvents.push({
+              id: `vfx_col_lightning_${nr}_${lCol}_${vfxEvents.length}`,
+              r: nr,
+              c: lCol,
+              type: 'lightning',
+              tileType: 'YIN_YANG',
+              isSpecial: true,
+            });
+          }
+        }
+        initialRemoval.add(`${r1},${c1}`);
+        initialRemoval.add(`${r2},${c2}`);
+      } else if (tileA.special === 'BOMB_4' || tileB.special === 'BOMB_4') {
+        // Bom 4 viên (BOMB_4): Nổ 3x3 xung quanh
+        specialExplosions++;
+        extraTurn = true;
+        const bRow = tileA.special === 'BOMB_4' ? r1 : r2;
+        const bCol = tileA.special === 'BOMB_4' ? c1 : c2;
+
+        vfxEvents.push({
+          id: `vfx_init_bomb_${bRow}_${bCol}_${vfxEvents.length}`,
+          r: bRow,
+          c: bCol,
+          type: 'explosion',
+          tileType: 'GOLD',
+          isSpecial: true,
+        });
+
+        for (let dr = -1; dr <= 1; dr++) {
+          for (let dc = -1; dc <= 1; dc++) {
+            const nr = bRow + dr;
+            const nc = bCol + dc;
+            if (nr >= 0 && nr < GRID_ROWS && nc >= 0 && nc < GRID_COLS) {
+              initialRemoval.add(`${nr},${nc}`);
+              vfxEvents.push({
+                id: `vfx_bomb_area_${nr}_${nc}_${vfxEvents.length}`,
+                r: nr,
+                c: nc,
+                type: 'explosion',
+                tileType: currentBoard[nr][nc].type,
+                isSpecial: false,
+              });
+            }
+          }
+        }
+      }
+
+      // Thu hoạch tài nguyên từ các ô nổ ban đầu
+      initialRemoval.forEach((coordStr) => {
+        const [r, c] = coordStr.split(',').map(Number);
+        const t = currentBoard[r]?.[c];
+        if (t) harvestTile(t);
+      });
+
+      clearedTileCount += initialRemoval.size;
+
+      // Áp dụng trọng lực ngay cho đợt nổ ban đầu
+      const nextBoard: (Tile | null)[][] = Array.from({ length: GRID_ROWS }, () =>
+        Array(GRID_COLS).fill(null)
+      );
+      for (let c = 0; c < GRID_COLS; c++) {
+        let writeRow = GRID_ROWS - 1;
+        for (let r = GRID_ROWS - 1; r >= 0; r--) {
+          if (!initialRemoval.has(`${r},${c}`)) {
+            nextBoard[writeRow][c] = {
+              ...currentBoard[r][c],
+              row: writeRow,
+              col: c,
+            };
+            writeRow--;
+          }
+        }
+        while (writeRow >= 0) {
+          const chosenType = getRandomTileType(rng);
+          const isBlood = chosenType === 'SWORD' && rng() < 0.08;
+          nextBoard[writeRow][c] = {
+            id: generateTileId(rng),
+            type: chosenType,
+            special: 'NORMAL',
+            row: writeRow,
+            col: c,
+            isBloodSword: isBlood,
+            isNew: true,
+          };
+          writeRow--;
+        }
+      }
+      currentBoard = nextBoard as Tile[][];
+    }
+  }
 
   while (true) {
     const matches = findMatches(currentBoard);
+    if (matches.length === 0 && (comboCount > 0 || initialSpecialTriggered)) break;
     if (matches.length === 0) break;
 
     comboCount++;
@@ -265,7 +489,7 @@ export const resolveCascade = (
     }[] = [];
 
     matches.forEach((group) => {
-      // 4+ in a row triggers Extra Turn!
+      // Ăn từ 4 viên trở lên: Nhận Thêm Lượt!
       if (group.tiles.length >= 4) {
         extraTurn = true;
       }
@@ -275,71 +499,147 @@ export const resolveCascade = (
       group.tiles.forEach((coord, idx) => {
         tilesToRemove.add(`${coord.row},${coord.col}`);
 
-        if (group.type === 'SWORD') {
-          totalSwords++;
-          if (coord.isBloodSword) {
-            bloodSwordsMatched++;
-          }
-        } else if (group.type === 'HEART') {
-          totalHearts++;
-        } else if (group.type === 'GOLD') {
-          totalGold += 10;
-        } else if (group.type === 'CHUNG_CAKE') {
-          totalChungCakes++;
-        } else if (group.type === 'YIN_YANG') {
-          totalYinYang += 15;
-        } else if (group.type === 'ELIXIR') {
-          totalElixirs++;
+        const t = currentBoard[coord.row]?.[coord.col];
+        if (t) {
+          harvestTile(t);
         }
 
+        // Tạo sự kiện hiệu ứng đồ họa (VFX) trên bàn cờ
+        const vfxType: 'lightning' | 'explosion' | 'slash' | 'burst' =
+          group.tiles.length >= 5
+            ? 'lightning'
+            : group.tiles.length === 4
+            ? 'explosion'
+            : group.type === 'SWORD'
+            ? 'slash'
+            : 'burst';
+
+        vfxEvents.push({
+          id: `vfx_${comboCount}_${coord.row}_${coord.col}_${vfxEvents.length}`,
+          r: coord.row,
+          c: coord.col,
+          type: vfxType,
+          tileType: group.type,
+          isSpecial: group.tiles.length >= 4,
+        });
+
+        // Tạo ngọc đặc biệt tại điểm giữa của dãy ăn
         if (idx === midIdx) {
-          if (group.createsBloodSword) {
-            specialToSpawn.push({
-              r: coord.row,
-              c: coord.col,
-              type: 'SWORD',
-              special: 'NORMAL',
-              isBloodSword: true,
-            });
-          } else if (group.isSpecialCreation !== 'NORMAL') {
+          if (group.tiles.length >= 5) {
+            // Ăn 5 đến 6 viên trở lên: Tạo SẤM SÉT (LIGHTNING_5)
+            // Nếu là Kiếm: Tích hợp vừa Sấm Sét vừa Huyết Kiếm
             specialToSpawn.push({
               r: coord.row,
               c: coord.col,
               type: group.type,
-              special: group.isSpecialCreation,
-              isBloodSword: coord.isBloodSword,
+              special: 'LIGHTNING_5',
+              isBloodSword: group.type === 'SWORD' || coord.isBloodSword,
+            });
+          } else if (group.tiles.length === 4) {
+            // Ăn 4 viên: Tạo BOM (BOMB_4) hoặc Huyết Kiếm
+            specialToSpawn.push({
+              r: coord.row,
+              c: coord.col,
+              type: group.type,
+              special: group.type === 'SWORD' ? 'NORMAL' : 'BOMB_4',
+              isBloodSword: group.type === 'SWORD',
             });
           }
         }
       });
     });
 
-    clearedTileCount += tilesToRemove.size;
-
-    // Trigger existing special tiles if detonated
+    // Kích hoạt nổ dây chuyền các ngọc đặc biệt nằm trong vùng tiêu diệt
+    const newlyExploded = new Set<string>();
     tilesToRemove.forEach((coordStr) => {
       const [r, c] = coordStr.split(',').map(Number);
       const target = currentBoard[r]?.[c];
       if (!target) return;
+
       if (target.special === 'BOMB_4') {
         specialExplosions++;
+        vfxEvents.push({
+          id: `vfx_bomb_chain_${r}_${c}_${vfxEvents.length}`,
+          r,
+          c,
+          type: 'explosion',
+          tileType: target.type,
+          isSpecial: true,
+        });
         for (let dr = -1; dr <= 1; dr++) {
           for (let dc = -1; dc <= 1; dc++) {
             const nr = r + dr;
             const nc = c + dc;
             if (nr >= 0 && nr < GRID_ROWS && nc >= 0 && nc < GRID_COLS) {
-              tilesToRemove.add(`${nr},${nc}`);
+              const k = `${nr},${nc}`;
+              if (!tilesToRemove.has(k)) {
+                tilesToRemove.add(k);
+                newlyExploded.add(k);
+                vfxEvents.push({
+                  id: `vfx_bomb_wave_${nr}_${nc}_${vfxEvents.length}`,
+                  r: nr,
+                  c: nc,
+                  type: 'explosion',
+                  tileType: currentBoard[nr][nc]?.type || 'GOLD',
+                  isSpecial: false,
+                });
+              }
             }
           }
         }
       } else if (target.special === 'LIGHTNING_5') {
         specialExplosions++;
-        for (let nc = 0; nc < GRID_COLS; nc++) tilesToRemove.add(`${r},${nc}`);
-        for (let nr = 0; nr < GRID_ROWS; nr++) tilesToRemove.add(`${nr},${c}`);
+        vfxEvents.push({
+          id: `vfx_light_chain_${r}_${c}_${vfxEvents.length}`,
+          r,
+          c,
+          type: 'lightning',
+          tileType: target.type,
+          isSpecial: true,
+        });
+        for (let nc = 0; nc < GRID_COLS; nc++) {
+          const k = `${r},${nc}`;
+          if (!tilesToRemove.has(k)) {
+            tilesToRemove.add(k);
+            newlyExploded.add(k);
+            vfxEvents.push({
+              id: `vfx_light_wave_${r}_${nc}_${vfxEvents.length}`,
+              r,
+              c: nc,
+              type: 'lightning',
+              tileType: 'YIN_YANG',
+              isSpecial: false,
+            });
+          }
+        }
+        for (let nr = 0; nr < GRID_ROWS; nr++) {
+          const k = `${nr},${c}`;
+          if (!tilesToRemove.has(k)) {
+            tilesToRemove.add(k);
+            newlyExploded.add(k);
+            vfxEvents.push({
+              id: `vfx_light_wave_${nr}_${c}_${vfxEvents.length}`,
+              r: nr,
+              c,
+              type: 'lightning',
+              tileType: 'YIN_YANG',
+              isSpecial: false,
+            });
+          }
+        }
       }
     });
 
-    // Apply gravity
+    // Thu hoạch tài nguyên cho toàn bộ các ô nổ dây chuyền
+    newlyExploded.forEach((coordStr) => {
+      const [r, c] = coordStr.split(',').map(Number);
+      const t = currentBoard[r]?.[c];
+      if (t) harvestTile(t);
+    });
+
+    clearedTileCount += tilesToRemove.size;
+
+    // Áp dụng trọng lực (Gravity)
     const nextBoard: (Tile | null)[][] = Array.from({ length: GRID_ROWS }, () =>
       Array(GRID_COLS).fill(null)
     );
@@ -375,18 +675,21 @@ export const resolveCascade = (
       }
     }
 
+    // Đặt ngọc đặc biệt mới vào vị trí bàn cờ sau trọng lực
     specialToSpawn.forEach((spec) => {
-      if (nextBoard[spec.r]?.[spec.c]) {
-        nextBoard[spec.r][spec.c]!.type = spec.type;
-        nextBoard[spec.r][spec.c]!.special = spec.special;
+      // Ưu tiên đặt tại hàng của ô bị ăn hoặc hàng gần nhất trong cột
+      const targetR = Math.min(GRID_ROWS - 1, Math.max(0, spec.r));
+      if (nextBoard[targetR]?.[spec.c]) {
+        nextBoard[targetR][spec.c]!.type = spec.type;
+        nextBoard[targetR][spec.c]!.special = spec.special;
         if (spec.isBloodSword) {
-          nextBoard[spec.r][spec.c]!.isBloodSword = true;
+          nextBoard[targetR][spec.c]!.isBloodSword = true;
         }
       }
     });
 
     currentBoard = nextBoard as Tile[][];
-    if (comboCount > 12) break;
+    if (comboCount > 15) break;
   }
 
   if (!hasAnyValidMoves(currentBoard)) {
@@ -407,6 +710,7 @@ export const resolveCascade = (
     extraTurn,
     clearedTileCount,
     specialExplosions,
+    vfxEvents: vfxEvents.slice(0, 48),
   };
 };
 

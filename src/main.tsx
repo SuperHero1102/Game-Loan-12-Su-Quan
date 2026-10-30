@@ -124,8 +124,10 @@ function scheduleBackgroundWarmup() {
 
 const rootElement = document.getElementById('root');
 if (rootElement && !(window as any).__APP_MOUNTED__) {
-  (window as any).__APP_MOUNTED__ = true;
-  createRoot(rootElement).render(<App />);
+  if (!(window as any).__LEGACY_MODE__) {
+    (window as any).__APP_MOUNTED__ = true;
+    createRoot(rootElement).render(<App />);
+  }
 }
 
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {

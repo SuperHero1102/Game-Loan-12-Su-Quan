@@ -179,13 +179,21 @@ export const WarlordCard3D: React.FC<WarlordCard3DProps> = ({
         }}
       >
         {(() => {
-          const isFullCardAsset = !!warlord.portrait3D?.includes('IMG_271');
+          const isEmperor = warlord.id === 'dinh_tien_hoang';
+          const isFullCardAsset =
+            !!warlord.portrait3D?.includes('IMG_271') ||
+            !!warlord.portrait3D?.includes('image_15aa223a') ||
+            isEmperor;
 
           if (isFullCardAsset) {
             return (
               /* TRỌN VẸN THẺ TƯỚNG 3D NGUYÊN BẢN (KHUNG RỒNG VÀNG, TIÊU ĐỀ, 5 SAO, CHỈ SỐ GỐC) */
               <div
-                className="relative rounded-2xl overflow-hidden shadow-[0_22px_50px_rgba(0,0,0,0.95)] border-2 border-yellow-400/80 bg-stone-950"
+                className={`relative rounded-2xl overflow-hidden bg-stone-950 transition-all ${
+                  isEmperor
+                    ? 'border-4 border-yellow-300 ring-4 ring-amber-500/80 shadow-[0_0_45px_rgba(250,204,21,0.95),0_25px_60px_rgba(0,0,0,0.98)]'
+                    : 'border-2 border-yellow-400/80 shadow-[0_22px_50px_rgba(0,0,0,0.95)]'
+                }`}
                 style={{
                   transform: 'translateZ(20px)',
                   transformStyle: 'preserve-3d',
@@ -197,6 +205,30 @@ export const WarlordCard3D: React.FC<WarlordCard3DProps> = ({
                   referrerPolicy="no-referrer"
                   className="w-full h-auto object-contain block select-none drop-shadow-2xl"
                 />
+
+                {/* Hiệu ứng viền vàng hoàng kim long lanh lấp lánh riêng cho Hoàng Đế Đinh Tiên Hoàng */}
+                {isEmperor && (
+                  <>
+                    {/* Hào quang lấp lánh chạy quanh viền */}
+                    <div className="absolute inset-0 rounded-2xl ring-2 ring-yellow-200/90 pointer-events-none animate-pulse" />
+                    <div className="absolute inset-0 bg-gradient-to-tr from-amber-400/20 via-transparent to-yellow-300/30 pointer-events-none mix-blend-screen" />
+                    
+                    {/* Bông tuyết & sao hoàng kim lấp lánh trên góc thẻ */}
+                    <div className="absolute top-1.5 left-2 text-yellow-300 text-xs font-black animate-ping pointer-events-none drop-shadow">
+                      ✨
+                    </div>
+                    <div className="absolute top-2 right-2 text-yellow-200 text-sm font-black animate-pulse pointer-events-none drop-shadow">
+                      ⭐
+                    </div>
+                    <div className="absolute bottom-2 left-2 text-amber-300 text-xs animate-bounce pointer-events-none drop-shadow">
+                      ❄
+                    </div>
+                    <div className="absolute bottom-2 right-2 text-yellow-300 text-xs animate-spin pointer-events-none drop-shadow">
+                      ✨
+                    </div>
+                  </>
+                )}
+
                 {/* Viền kim loại nổi khối tinh xảo */}
                 <div className="absolute inset-0 rounded-2xl ring-1 ring-inset ring-yellow-200/50 pointer-events-none" />
               </div>

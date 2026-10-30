@@ -38,7 +38,7 @@ export const StageSelectModal: React.FC<StageSelectModalProps> = ({
 
         <h2 className="text-xs sm:text-sm font-black text-yellow-200 font-display uppercase tracking-wider flex items-center justify-center gap-1.5 whitespace-nowrap truncate min-w-0 drop-shadow">
           <Trophy className="w-4 h-4 text-yellow-400 shrink-0" />
-          <span className="truncate">TIẾN TRÌNH 12 ẢI SỨ QUÂN</span>
+          <span className="truncate">DẸP LOẠN 12 ẢI SỨ QUÂN</span>
         </h2>
 
         <div className="flex items-center gap-1.5 shrink-0">

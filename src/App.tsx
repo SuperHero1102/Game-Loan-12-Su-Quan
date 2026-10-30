@@ -21,6 +21,8 @@ import { BattleScreen } from './components/battle/BattleScreen';
 import { PvPLobby } from './components/pvp/PvPLobby';
 import { ShopModal } from './components/shop/ShopModal';
 import { HeroInfoModal } from './components/character/HeroInfoModal';
+import { CoronationModal } from './components/campaign/CoronationModal';
+import { StoryChronicleModal } from './components/campaign/StoryChronicleModal';
 import { UpdateNotificationToast } from './components/common/UpdateNotificationToast';
 
 class GameErrorBoundary extends React.Component<
@@ -110,6 +112,24 @@ export default function App() {
   // Modals
   const [isShopOpen, setIsShopOpen] = useState(false);
   const [isHeroInfoOpen, setIsHeroInfoOpen] = useState(false);
+  const [isCoronationOpen, setIsCoronationOpen] = useState(false);
+  const [isChronicleOpen, setIsChronicleOpen] = useState(false);
+  const [initialRoomFromUrl, setInitialRoomFromUrl] = useState<string | undefined>(undefined);
+
+  // Tự động nhận diện mã phòng khi quét qua Camera gốc iPhone/Android (?room=XXXX)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const roomParam = searchParams.get('room') || searchParams.get('join');
+      if (roomParam && roomParam.trim()) {
+        const cleanCode = roomParam.trim().toUpperCase();
+        setInitialRoomFromUrl(cleanCode);
+        setScreen('PVP_LOBBY');
+        setGameMode('PVP_P2P');
+      }
+    } catch {}
+  }, []);
 
   const screenRef = useRef<GameScreen>(screen);
   const gameModeRef = useRef<GameMode>(gameMode);
@@ -216,10 +236,14 @@ export default function App() {
     setScreen('ROADMAP');
   };
 
-  // 3. Battle from PvE Mode (Custom Difficulty — truyền chuẩn xác cấp độ khó)
-  const handleStartPvEBattle = (warlord: Warlord, difficulty: PveDifficulty) => {
-    setP1Warlord(DINH_BO_LINH);
-    setP2Warlord(warlord);
+  // 3. Battle from PvE Mode (Custom Difficulty — truyền chuẩn xác cấp độ khó & tướng ta)
+  const handleStartPvEBattle = (
+    enemyWarlord: Warlord,
+    difficulty: PveDifficulty,
+    playerWarlord?: Warlord
+  ) => {
+    setP1Warlord(playerWarlord || DINH_BO_LINH);
+    setP2Warlord(enemyWarlord);
     setPveDifficulty(difficulty);
     setGameMode('PVE_CUSTOM');
     setBattleInstanceKey((k) => k + 1);
@@ -282,6 +306,13 @@ export default function App() {
       }
 
       const defeatedSet = new Set([...prev.defeatedWarlords, defeatedWarlordId]);
+      const isAllConquered = defeatedSet.size >= 12;
+      const isNewlyCompleted = isAllConquered && (!prev.hasCompletedCampaign || !prev.coronationViewed);
+
+      if (isNewlyCompleted) {
+        setIsCoronationOpen(true);
+      }
+
       const conqueredStage =
         WARLORDS.find((w) => w.id === defeatedWarlordId)?.stageNumber || activeStageNumber;
       const nextUnlocked =
@@ -303,6 +334,9 @@ export default function App() {
         currentStageNumber: nextUnlocked,
         currentNodeId:
           gameMode === 'CAMPAIGN' && nextMapNode ? nextMapNode.id : prev.currentNodeId,
+        hasCompletedCampaign: isAllConquered ? true : prev.hasCompletedCampaign,
+        coronationViewed: isAllConquered ? true : prev.coronationViewed,
+        unlockedEmperorSkin: isAllConquered ? true : prev.unlockedEmperorSkin,
       };
     });
 
@@ -394,6 +428,30 @@ export default function App() {
     setScreen('TITLE');
   };
 
+  const handleStartNewGamePlus = () => {
+    soundEngine.playBronzeGong();
+    setProfile((prev) => ({
+      ...prev,
+      prestigeLevel: (prev.prestigeLevel || 0) + 1,
+      defeatedWarlords: [],
+      currentStageNumber: 1,
+      currentNodeId: 'binh_kieu',
+      hasCompletedCampaign: false,
+      coronationViewed: false,
+      unlockedEmperorSkin: true,
+    }));
+    setIsCoronationOpen(false);
+    setScreen('WORLD_MAP');
+  };
+
+  const handleSelectStageFromChronicle = (stageNum: number) => {
+    setIsChronicleOpen(false);
+    const target = WARLORDS.find((w) => w.stageNumber === stageNum);
+    if (target) {
+      handleSelectStage(target, stageNum);
+    }
+  };
+
   return (
     <main className="w-full h-full bg-bronze-pattern flex items-center justify-center p-0 text-stone-100 antialiased select-none overflow-hidden">
       {/* Thông báo nhẹ khi hệ thống tải xong bản cập nhật mới lúc có mạng */}
@@ -471,6 +529,8 @@ export default function App() {
               onOpenHeroInfo={() => setIsHeroInfoOpen(true)}
               onOpenPvP={() => setScreen('PVP_LOBBY')}
               onReturnTitle={() => setScreen('TITLE')}
+              onOpenCoronation={() => setIsCoronationOpen(true)}
+              onOpenChronicle={() => setIsChronicleOpen(true)}
               isMuted={settings.isMuted}
               onToggleMute={toggleMute}
             />
@@ -481,6 +541,10 @@ export default function App() {
               onStartHotseat={handleStartHotseat}
               onStartP2P={handleStartP2P}
               onBack={() => setScreen('TITLE')}
+              initialRoomCode={initialRoomFromUrl}
+              turnTimerEnabled={settings.turnTimerEnabled}
+              turnTimeLimit={settings.turnTimeLimit || 20}
+              onUpdateTurnTimer={handleUpdateTurnTimer}
             />
           )}
 
@@ -499,6 +563,7 @@ export default function App() {
               bonusDef={bonusDef}
               bonusHp={bonusHp}
               bonusArmor={profile.baseArmor}
+              prestigeLevel={profile.prestigeLevel || 0}
               onVictory={handleBattleVictory}
               onDefeat={handleBattleDefeat}
               onBackToMap={() =>
@@ -530,6 +595,28 @@ export default function App() {
               profile={profile}
               onResetProgress={handleResetProgress}
               onClose={() => setIsHeroInfoOpen(false)}
+            />
+          )}
+
+          {/* Đại Lễ Đăng Quang Hoàng Đế 968 & New Game+ */}
+          {isCoronationOpen && (
+            <CoronationModal
+              profile={profile}
+              onClose={() => setIsCoronationOpen(false)}
+              onStartNewGamePlus={handleStartNewGamePlus}
+              onOpenChronicle={() => {
+                setIsCoronationOpen(false);
+                setIsChronicleOpen(true);
+              }}
+            />
+          )}
+
+          {/* Hồi Ký 12 Sứ Quân Sử Thi Toàn Thư */}
+          {isChronicleOpen && (
+            <StoryChronicleModal
+              profile={profile}
+              onClose={() => setIsChronicleOpen(false)}
+              onSelectStageToFight={handleSelectStageFromChronicle}
             />
           )}
         </GameErrorBoundary>

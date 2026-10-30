@@ -381,10 +381,49 @@ export const BattleStage2D: React.FC<BattleStage2DProps> = ({
           {/* BANNER TUYỆT KỸ NỘ */}
           {activeSkillCaster && (
             <div className="absolute top-1 flex flex-col items-center justify-center z-40 animate-bounce">
-              <div className="px-3 py-1 rounded-full bg-gradient-to-r from-red-600 via-amber-500 to-yellow-400 border-2 border-yellow-100 shadow-[0_0_25px_rgba(251,191,36,1)] text-stone-950 font-black text-xs uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
+              <div className={`px-3 py-1 rounded-full ${
+                activeSkillCaster.id === 'dinh_tien_hoang'
+                  ? 'bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 border-2 border-white shadow-[0_0_35px_rgba(250,204,21,1)] ring-2 ring-yellow-400'
+                  : 'bg-gradient-to-r from-red-600 via-amber-500 to-yellow-400 border-2 border-yellow-100 shadow-[0_0_25px_rgba(251,191,36,1)]'
+              } text-stone-950 font-black text-xs uppercase tracking-wider flex items-center gap-1 whitespace-nowrap`}>
                 <Zap className="w-3.5 h-3.5 fill-stone-950" />
                 <span>{activeSkillCaster.skillName}</span>
               </div>
+            </div>
+          )}
+
+          {/* HIỆU ỨNG ĐẶC BIỆT: BÔNG TUYẾT & BỤI VÀNG HOÀNG KIM BAY TÓE TUNG KHI ĐINH TIÊN HOÀNG RA CHIÊU */}
+          {activeSkillCaster?.id === 'dinh_tien_hoang' && (
+            <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(250,204,21,0.32)_0%,transparent_75%)] animate-pulse" />
+              {[
+                { top: '15%', left: '20%', size: 'text-xl', delay: '0s', char: '❄' },
+                { top: '25%', left: '75%', size: 'text-2xl', delay: '0.1s', char: '❄' },
+                { top: '45%', left: '35%', size: 'text-lg', delay: '0.2s', char: '✨' },
+                { top: '60%', left: '15%', size: 'text-2xl', delay: '0.15s', char: '❄' },
+                { top: '30%', left: '50%', size: 'text-3xl', delay: '0.05s', char: '❄' },
+                { top: '70%', left: '80%', size: 'text-xl', delay: '0.25s', char: '❄' },
+                { top: '20%', left: '85%', size: 'text-lg', delay: '0.18s', char: '✨' },
+                { top: '80%', left: '40%', size: 'text-2xl', delay: '0.22s', char: '❄' },
+                { top: '50%', left: '65%', size: 'text-2xl', delay: '0.12s', char: '✨' },
+                { top: '10%', left: '45%', size: 'text-xl', delay: '0.08s', char: '❄' },
+                { top: '40%', left: '10%', size: 'text-lg', delay: '0.14s', char: '❄' },
+                { top: '75%', left: '60%', size: 'text-xl', delay: '0.28s', char: '❄' },
+              ].map((flake, idx) => (
+                <div
+                  key={idx}
+                  className={`absolute ${flake.size} font-black text-yellow-300 drop-shadow-[0_0_12px_rgba(250,204,21,1)] animate-ping`}
+                  style={{
+                    top: flake.top,
+                    left: flake.left,
+                    animationDuration: '1.2s',
+                    animationDelay: flake.delay,
+                  }}
+                >
+                  {flake.char}
+                </div>
+              ))}
+              <div className="absolute inset-0 bg-gradient-to-t from-amber-500/25 via-yellow-400/15 to-transparent pointer-events-none mix-blend-screen" />
             </div>
           )}
 

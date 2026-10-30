@@ -170,7 +170,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
             className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-950/95 via-amber-900/90 to-amber-950/95 hover:border-amber-400 active:scale-95 text-amber-200 font-bold text-xs rounded-xl border border-amber-500/80 shadow-md flex items-center justify-center gap-2 uppercase tracking-wide transition cursor-pointer whitespace-nowrap"
           >
             <Trophy className="w-4 h-4 text-yellow-400 shrink-0" />
-            <span className="truncate">TIẾN TRÌNH 12 ẢI SỨ QUÂN</span>
+            <span className="truncate">DẸP LOẠN 12 ẢI SỨ QUÂN</span>
           </button>
 
           {/* 4. Đấu Với Máy */}
@@ -207,7 +207,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
 
       {/* Đế Đáy Hoàng Kim Đông Sơn Tràn Viền */}
       <div className="royal-bottom-dock">
-        <div className="w-full max-w-md mx-auto flex items-center justify-between text-[9px] sm:text-[10.5px] text-amber-200 font-bold tracking-tight sm:tracking-wide px-1">
+        <div className="w-full max-w-md mx-auto flex items-center justify-between text-[9px] sm:text-[10.5px] leading-none text-amber-200 font-bold tracking-tight sm:tracking-wide px-1">
           <span className="text-yellow-400 shrink-0 whitespace-nowrap">⚜️ ĐẠI CỒ VIỆT</span>
           <span className="text-amber-200/95 text-center px-1 whitespace-nowrap font-bold">
             Phát triển bởi GemPro - Hải An Group

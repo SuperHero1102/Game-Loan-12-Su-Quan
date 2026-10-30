@@ -120,11 +120,11 @@ h1, h2, h3, h4, .font-display {
   flex-shrink: 0;
 }
 
-/* Đế Đáy Hoàng Kim Đông Sơn Tràn Viền (Royal Bronze Bottom Dock - Căn chỉnh chính giữa hoàn hảo) */
+/* Đế Đáy Hoàng Kim Đông Sơn Tràn Viền (Royal Bronze Bottom Dock - Cân đều chính giữa tuyệt đối từ vạch vàng tới mép đáy) */
 .royal-bottom-dock {
   width: 100%;
-  padding-top: max(0.65rem, 10px);
-  padding-bottom: max(0.65rem, calc(env(safe-area-inset-bottom, 0px) * 0.7 + 8px));
+  padding-top: max(0.85rem, calc(env(safe-area-inset-bottom, 0px) * 0.45 + 8px));
+  padding-bottom: max(0.85rem, calc(env(safe-area-inset-bottom, 0px) * 0.45 + 8px));
   padding-left: 0.85rem;
   padding-right: 0.85rem;
   background-color: #431b05;
@@ -366,4 +366,61 @@ html[data-legacy-gpu="true"] .backdrop-blur-sm {
 
 .animate-hoof-dust {
   animation: hoof-dust 0.28s ease-out infinite;
+}
+
+/* Living Map Atmospheric Animations */
+@keyframes flag-wave {
+  0%, 100% {
+    transform: rotate(0deg) skewY(0deg) scaleX(1);
+  }
+  30% {
+    transform: rotate(-4deg) skewY(-3deg) scaleX(1.04);
+  }
+  70% {
+    transform: rotate(3deg) skewY(2deg) scaleX(0.96);
+  }
+}
+
+.animate-flag-wave {
+  animation: flag-wave 2.4s ease-in-out infinite;
+  transform-origin: left center;
+}
+
+@keyframes cloud-drift-left {
+  0% {
+    transform: translateX(-15%);
+  }
+  50% {
+    transform: translateX(15%);
+  }
+  100% {
+    transform: translateX(-15%);
+  }
+}
+
+.animate-cloud-drift-1 {
+  animation: cloud-drift-left 28s ease-in-out infinite;
+}
+
+.animate-cloud-drift-2 {
+  animation: cloud-drift-left 36s ease-in-out infinite reverse;
+}
+
+@keyframes smoke-float {
+  0% {
+    transform: translateY(0) scale(0.7);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateY(-8px) scale(1.1) translateX(3px);
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(-16px) scale(1.4) translateX(-2px);
+    opacity: 0;
+  }
+}
+
+.animate-smoke {
+  animation: smoke-float 2.2s ease-out infinite;
 }

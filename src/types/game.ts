@@ -186,4 +186,8 @@ export interface PlayerProfile {
   currentStageNumber: number; // Ải cao nhất đã mở
   defeatedWarlords: string[];
   lives: number;
+  hasCompletedCampaign?: boolean; // Đã thống nhất 12 sứ quân
+  coronationViewed?: boolean;     // Đã chứng kiến Đại Lễ Đăng Quang
+  prestigeLevel?: number;         // Cấp độ Tái Lập Giang Sơn New Game+ (0 = lần 1, 1 = Vương Triều I, ...)
+  unlockedEmperorSkin?: boolean;  // Đã mở khóa Hoàng Đế Đinh Tiên Hoàng Long Bào 3D
 }

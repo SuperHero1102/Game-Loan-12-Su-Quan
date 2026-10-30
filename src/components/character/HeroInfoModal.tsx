@@ -208,6 +208,26 @@ export const HeroInfoModal: React.FC<HeroInfoModalProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Thông tin Hoàng Đế Đinh Tiên Hoàng */}
+              {activeWarlord.id === 'dinh_tien_hoang' && (
+                <div className="p-2.5 bg-gradient-to-r from-red-950/90 via-amber-950/90 to-red-950/90 border border-yellow-400 rounded-xl space-y-1 text-xs shadow-lg">
+                  <div className="flex items-center justify-between font-bold text-yellow-300">
+                    <span className="flex items-center gap-1">
+                      <Crown className="w-3.5 h-3.5 text-yellow-400" />
+                      Đinh Tiên Hoàng Đế (Long Bào Hoàng Kim)
+                    </span>
+                    <span className={profile.unlockedEmperorSkin || profile.hasCompletedCampaign || (profile.defeatedWarlords.length >= 12) ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+                      {profile.unlockedEmperorSkin || profile.hasCompletedCampaign || (profile.defeatedWarlords.length >= 12) ? '✓ ĐÃ MỞ KHÓA' : '🔒 ĐẠI LỄ 968'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-200">
+                    {profile.unlockedEmperorSkin || profile.hasCompletedCampaign || (profile.defeatedWarlords.length >= 12)
+                      ? 'Dũng tướng Thần Thoại uy phong nhất với tuyệt kỹ Đại Cồ Việt Thần Uy và Long Bào Hoàng Kim!'
+                      : 'Hãy dẹp tan toàn bộ 12 ải Sứ Quân và cử hành Đại Lễ Đăng Quang tại Hoa Lư để mở khóa!'}
+                  </p>
+                </div>
+              )}
             </div>
           ) : viewTab === 'FULL_ART' ? (
             /* CHIÊM NGƯỠNG TOÀN CẢNH TRANH THẺ 3D NGUYÊN BẢN */

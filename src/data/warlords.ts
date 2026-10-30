@@ -438,4 +438,38 @@ export const WARLORDS: Warlord[] = [
   },
 ];
 
-export const ALL_CHARACTERS = [DINH_BO_LINH, ...WARLORDS];
+export const DINH_TIEN_HOANG: Warlord = {
+  id: 'dinh_tien_hoang',
+  name: 'Đinh Tiên Hoàng',
+  title: 'Hoàng Đế Đại Cồ Việt',
+  territory: 'Kinh Đô Hoa Lư (Đại Cồ Việt)',
+  shortTerritory: 'Đế Đô Hoa Lư',
+  stageNumber: 13,
+  baseHp: 1250,
+  baseArmor: 65,
+  baseAtk: 42,
+  baseDef: 28,
+  role: 'Thần Tướng Tối Thượng',
+  hpRating: 100,
+  atkRating: 98,
+  defRating: 96,
+  spd: 96,
+  mountName: 'Kim Ngưu Thần Tướng Giáp Vàng',
+  weaponName: 'Kiếm Thái Bình Thiên Tử',
+  weaponVisual: 'imperial_sword',
+  passiveName: 'Chân Mệnh Thiên Tử',
+  passiveDescription: 'Mọi ô ngọc ăn được tăng thêm 25% uy lực; khi sinh lực dưới 35%, hồi phục tức thì 20% máu.',
+  portrait3D: '/assets/aistudio/image_15aa223a.png',
+  sceneBackdrop: 'Kinh thành Hoa Lư cờ hoa rợp trời, cung điện nguy nga, muôn dân quy phục.',
+  crestType: 'imperial_crown',
+  avatarColor: '#eab308',
+  avatarEmoji: '🐉',
+  characterVisual: 'hero',
+  quote: 'Trẫm dẹp yên 12 sứ quân, thống nhất giang sơn một mối, lập quốc Đại Cồ Việt muôn thuở thái bình!',
+  skillName: 'Đại Cồ Việt Thần Uy',
+  skillDescription: 'Kim Ngưu phóng sấm sét chín tầng trời, Kiếm Thái Bình vung ra luồng long khí hủy diệt toàn bộ giáp trụ và hồi phục 150 sinh lực.',
+  skillCost: 100,
+  aiAggressiveness: 0.95,
+};
+
+export const ALL_CHARACTERS = [DINH_BO_LINH, DINH_TIEN_HOANG, ...WARLORDS];

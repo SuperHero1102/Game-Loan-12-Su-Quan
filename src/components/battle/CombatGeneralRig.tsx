@@ -48,7 +48,8 @@ export const CombatGeneralRig: React.FC<CombatGeneralRigProps> = ({
   const isDefeat = status === 'defeat';
 
   const isCharging = isAttacking || isSkill;
-  const isFullCardAsset = portrait3D.includes('IMG_271');
+  const isEmperor = id === 'dinh_tien_hoang';
+  const isFullCardAsset = portrait3D.includes('IMG_271') || portrait3D.includes('image_15aa223a') || isEmperor;
 
   // Bong bóng lời thoại trực tiếp trên đầu tướng ("Ựa!", "Ha ha! Toàn thắng!", "Ta xin hàng!")
   const renderSpeechBubble = () => {
@@ -310,7 +311,9 @@ export const CombatGeneralRig: React.FC<CombatGeneralRigProps> = ({
         {/* Hào quang năng lượng 3D sau lưng tướng */}
         <div
           className={`absolute inset-2 rounded-full blur-md pointer-events-none transition-opacity duration-300 ${
-            isSkill
+            isEmperor
+              ? 'bg-gradient-to-tr from-yellow-500/90 via-amber-400/95 to-yellow-200/90 opacity-100 animate-pulse ring-2 ring-yellow-300'
+              : isSkill
               ? 'bg-gradient-to-tr from-red-600/75 via-amber-400/75 to-yellow-300/75 opacity-100 animate-pulse'
               : isAttacking
               ? 'bg-amber-500/50 opacity-95'
@@ -319,6 +322,10 @@ export const CombatGeneralRig: React.FC<CombatGeneralRigProps> = ({
               : 'bg-amber-500/15 opacity-60'
           }`}
         />
+        {/* Hào quang Kim Ngưu Đế Vương cho Đinh Tiên Hoàng */}
+        {isEmperor && (
+          <div className="absolute -inset-3 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(251,191,36,0.45)_0%,transparent_70%)] pointer-events-none animate-pulse" />
+        )}
 
         {/* LỚP 1: TOÀN THÂN TƯỚNG & LINH THÚ 3D PHI NƯỚC ĐẠI */}
         <div

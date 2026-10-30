@@ -7,6 +7,7 @@
  */
 
 import Peer, { DataConnection } from 'peerjs';
+import { getDeviceInfo } from './deviceDetection';
 
 export type P2PMessage =
   | {
@@ -22,6 +23,14 @@ export type P2PMessage =
       hostWarlordId: string;
       clientWarlordId: string;
       initialBoardSeed: number;
+      turnTimerEnabled?: boolean;
+      turnTimeLimit?: number;
+      msgId?: string;
+    }
+  | {
+      type: 'TIMER_SYNC';
+      enabled: boolean;
+      timeLimit: number;
       msgId?: string;
     }
   | {
@@ -58,6 +67,52 @@ export type P2PMessage =
       type: 'QUERY_ROOMS';
       msgId?: string;
     }
+  | {
+      type: 'DEVICE_PRESENCE';
+      deviceId: string;
+      deviceName: string;
+      warlordId: string;
+      platform: 'ios' | 'android' | 'web';
+      status: 'READY' | 'BUSY' | 'INVITING';
+      timestamp: number;
+      msgId?: string;
+    }
+  | {
+      type: 'CHALLENGE_INVITE';
+      inviteId: string;
+      fromDeviceId: string;
+      fromDeviceName: string;
+      fromWarlordId: string;
+      toDeviceId?: string;
+      roomId: string;
+      boardSeed: number;
+      timestamp: number;
+      msgId?: string;
+    }
+  | {
+      type: 'CHALLENGE_ACCEPT';
+      inviteId: string;
+      fromDeviceId: string;
+      toDeviceId?: string;
+      roomId: string;
+      hostWarlordId: string;
+      clientWarlordId: string;
+      boardSeed: number;
+      msgId?: string;
+    }
+  | {
+      type: 'CHALLENGE_REJECT';
+      inviteId: string;
+      fromDeviceId: string;
+      toDeviceId?: string;
+      msgId?: string;
+    }
+  | {
+      type: 'CHALLENGE_CANCEL';
+      inviteId: string;
+      fromDeviceId: string;
+      msgId?: string;
+    }
   | { type: 'PING'; msgId?: string }
   | { type: 'PONG'; msgId?: string };
 
@@ -65,9 +120,12 @@ export type P2PEventListener = (msg: P2PMessage) => void;
 
 export interface NearbyDevice {
   id: string;
+  deviceId?: string;
   name: string;
   roomCode: string;
   hostWarlordId?: string;
+  platform?: 'ios' | 'android' | 'web';
+  status?: 'READY' | 'BUSY' | 'INVITING';
   rssi?: number;
   type: 'bluetooth' | 'nearby_p2p';
 }
@@ -97,6 +155,8 @@ class P2PService {
   private joinRetryTimer: ReturnType<typeof setInterval> | null = null;
   private beaconTimer: ReturnType<typeof setInterval> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private serverPollTimer: ReturnType<typeof setInterval> | null = null;
+  private lastServerMsgId: string = '';
 
   public currentRoomId: string | null = null;
   public isHost: boolean = false;
@@ -104,6 +164,8 @@ class P2PService {
   public hostWarlordId: string = 'dinh_bo_linh';
   public clientWarlordId: string = 'pham_bach_ho';
   public initialBoardSeed: number = 123456;
+  public hostTurnTimerEnabled: boolean = true;
+  public hostTurnTimeLimit: number = 20;
   public discoveredBeacons: Map<string, NearbyDevice> = new Map();
 
   constructor() {
@@ -188,6 +250,7 @@ class P2PService {
   }
 
   private cleanupPeerOnly() {
+    this.stopServerPolling();
     if (this.joinRetryTimer) {
       clearInterval(this.joinRetryTimer);
       this.joinRetryTimer = null;
@@ -214,6 +277,62 @@ class P2PService {
     }
   }
 
+  private stopServerPolling() {
+    if (this.serverPollTimer) {
+      clearInterval(this.serverPollTimer);
+      this.serverPollTimer = null;
+    }
+    this.lastServerMsgId = '';
+  }
+
+  /**
+   * Khởi động chu kỳ thăm dò tín hiệu từ máy chủ Cloud Run
+   * Đảm bảo hai điện thoại iPhone/Android kết nối tức thì và đồng bộ nước đi mượt mà xuyên mạng 4G/WiFi
+   */
+  public startServerPolling() {
+    this.stopServerPolling();
+    if (typeof window === 'undefined') return;
+
+    this.serverPollTimer = setInterval(async () => {
+      if (!this.currentRoomId) return;
+      try {
+        const side = this.isHost ? 'host' : 'guest';
+        const res = await fetch(
+          `/api/lobby/room/poll?roomId=${encodeURIComponent(this.currentRoomId)}&side=${side}&lastMsgId=${encodeURIComponent(this.lastServerMsgId)}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.ok && data.room) {
+            // Máy 1 (Host): Phát hiện Máy 2 vừa quét mã vào phòng
+            if (this.isHost && data.room.status === 'READY' && data.room.guestWarlordId) {
+              if (!this.isConnected) {
+                this.isConnected = true;
+                this.clientWarlordId = data.room.guestWarlordId;
+                this.initialBoardSeed = data.room.boardSeed || this.initialBoardSeed;
+                this.notifyListeners({
+                  type: 'JOIN_ROOM',
+                  roomId: this.currentRoomId,
+                  playerName: data.room.guestDeviceName || 'Máy Khách',
+                  warlordId: data.room.guestWarlordId,
+                });
+              }
+            }
+
+            // Xử lý gói tin nước đi / kỹ năng từ đối phương qua server relay
+            if (Array.isArray(data.messages) && data.messages.length > 0) {
+              data.messages.forEach((m: any) => {
+                this.lastServerMsgId = m.id;
+                if (m.data) {
+                  this.handleIncomingRaw(m.data);
+                }
+              });
+            }
+          }
+        }
+      } catch {}
+    }, 350);
+  }
+
   /**
    * Khởi chạy nhịp tim ping/pong định kỳ để duy trì cổng NAT xuyên suốt ván đấu trên 4G/WiFi
    */
@@ -229,7 +348,7 @@ class P2PService {
   }
 
   /**
-   * Máy 1 (Host): Tạo phòng với mã 4-6 ký tự, hỗ trợ kết nối từ LAN, WiFi, 4G Internet & Bluetooth
+   * Máy 1 (Host): Tạo phòng với mã 4-6 ký tự, hỗ trợ kết nối từ Server Relay, WebRTC, LAN & Bluetooth
    */
   public createRoom(roomId: string, warlordId: string, onStatusChange?: (status: string) => void) {
     this.cleanupPeerOnly();
@@ -241,7 +360,31 @@ class P2PService {
 
     if (typeof window === 'undefined') return;
 
-    // Phát sóng Beacon định kỳ để các thiết bị Bluetooth/LAN ở gần có thể quét thấy
+    const myDev = getDeviceInfo();
+    const seed = Math.floor(100000 + Math.random() * 900000);
+    this.initialBoardSeed = seed;
+
+    // 1. Đăng ký phòng ngay lập tức lên Server Relay (đảm bảo 100% không bị treo)
+    fetch('/api/lobby/room/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        roomId: cleanCode,
+        hostDeviceId: myDev.deviceId,
+        hostDeviceName: myDev.deviceName,
+        hostWarlordId: warlordId,
+        boardSeed: seed,
+      }),
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          onStatusChange?.('READY_WAITING');
+          this.startServerPolling();
+        }
+      })
+      .catch(() => {});
+
+    // 2. Phát sóng Beacon định kỳ để các thiết bị Bluetooth/LAN ở gần có thể quét thấy
     this.beaconTimer = setInterval(() => {
       if (this.isHost && this.currentRoomId && !this.isConnected) {
         this.send({
@@ -253,6 +396,7 @@ class P2PService {
       }
     }, 1500);
 
+    // 3. Khởi động WebRTC P2P song song làm kênh tăng tốc độ trễ
     try {
       const peerId = `${PEER_PREFIX}${cleanCode}`;
       const peer = new Peer(peerId, {
@@ -282,7 +426,7 @@ class P2PService {
         });
 
         conn.on('close', () => {
-          this.isConnected = false;
+          // Vẫn giữ kết nối qua server relay dự phòng
         });
       });
 
@@ -290,16 +434,16 @@ class P2PService {
         if (err?.type === 'unavailable-id') {
           onStatusChange?.('UNAVAILABLE_ID');
         } else {
-          onStatusChange?.('READY_LOCAL');
+          onStatusChange?.('READY_WAITING');
         }
       });
     } catch {
-      onStatusChange?.('READY_LOCAL');
+      onStatusChange?.('READY_WAITING');
     }
   }
 
   /**
-   * Máy 2 (Guest): Kết nối tới mã phòng của Máy 1 qua cả WebRTC (LAN / WiFi / 4G Internet) và Local Channel
+   * Máy 2 (Guest): Kết nối tới mã phòng của Máy 1 qua cả Server Relay, WebRTC và Local Channel
    */
   public joinRoom(
     roomId: string,
@@ -315,22 +459,72 @@ class P2PService {
     this.isConnected = false;
     this.clientWarlordId = warlordId;
 
+    const myDev = getDeviceInfo();
+    let isConnectedOrDone = false;
+
+    // A. KẾT NỐI TỨC THÌ QUA SERVER RELAY (Giải quyết triệt để vấn đề đứng hình "Đang vào...")
+    const tryServerJoin = () => {
+      if (isConnectedOrDone) return;
+      onConnecting?.(`Đang kết nối vào phòng [${cleanCode}]...`);
+
+      fetch('/api/lobby/room/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId: cleanCode,
+          guestDeviceId: myDev.deviceId,
+          guestDeviceName: playerName || myDev.deviceName,
+          guestWarlordId: warlordId,
+        }),
+      })
+        .then(async (res) => {
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.ok && data.room) {
+              isConnectedOrDone = true;
+              this.isConnected = true;
+              this.hostWarlordId = data.room.hostWarlordId || this.hostWarlordId;
+              this.initialBoardSeed = data.room.boardSeed || 123456;
+
+              // Bắt đầu chu kỳ nhận nước đi từ Host
+              this.startServerPolling();
+
+              // Kích hoạt ngay ROOM_READY để Máy 2 vào trận tức thì!
+              this.notifyListeners({
+                type: 'ROOM_READY',
+                roomId: cleanCode,
+                hostWarlordId: this.hostWarlordId,
+                clientWarlordId: warlordId,
+                initialBoardSeed: this.initialBoardSeed,
+              });
+            }
+          }
+        })
+        .catch(() => {});
+    };
+
+    // Gọi join server ngay lập tức
+    tryServerJoin();
+
+    // Thử lại join server sau 500ms nếu phòng vừa được tạo
+    const serverRetryTimer = setTimeout(tryServerJoin, 600);
+
     const sendJoinPacket = () => {
       this.send({
         type: 'JOIN_ROOM',
         roomId: cleanCode,
-        playerName,
+        playerName: playerName || myDev.deviceName,
         warlordId: this.clientWarlordId,
       });
     };
 
-    // Phát ngay qua kênh nội bộ
+    // Phát qua kênh nội bộ
     sendJoinPacket();
 
     let retryCount = 0;
-    const maxRetries = 25;
-    let isConnectedOrDone = false;
+    const maxRetries = 20;
 
+    // B. Thử kết nối WebRTC song song để tối ưu độ trễ
     const connectToPeerHost = () => {
       if (isConnectedOrDone) return;
       try {
@@ -351,20 +545,13 @@ class P2PService {
           this.activeConn = conn;
 
           conn.on('open', () => {
-            isConnectedOrDone = true;
             this.isConnected = true;
             this.startHeartbeat();
             sendJoinPacket();
-            setTimeout(sendJoinPacket, 200);
-            setTimeout(sendJoinPacket, 600);
           });
 
           conn.on('data', (data) => {
             this.handleIncomingRaw(data);
-          });
-
-          conn.on('error', () => {
-            // Ignore temporary conn glitch
           });
         });
 
@@ -373,29 +560,24 @@ class P2PService {
           if (err?.type === 'peer-unavailable') {
             if (retryCount < maxRetries) {
               retryCount++;
-              onConnecting?.(`Đang kết nối Máy 1 [Phòng ${cleanCode}]... (Lần ${retryCount}/${maxRetries})`);
+              tryServerJoin();
               setTimeout(connectToPeerHost, 1000);
             } else {
-              onError?.(`Không tìm thấy Phòng "${cleanCode}". Hãy chắc chắn Máy 1 đã bấm Tạo Phòng.`);
-            }
-          } else {
-            if (retryCount < maxRetries) {
-              retryCount++;
-              setTimeout(connectToPeerHost, 1100);
+              onError?.(`Không tìm thấy Phòng "${cleanCode}". Hãy kiểm tra lại mã hoặc nhờ Máy 1 tạo lại mã.`);
             }
           }
         });
-      } catch {
-        // Fallback sang Broadcast / LocalStorage
-      }
+      } catch {}
     };
 
     connectToPeerHost();
 
-    // Tự động gửi lặp gói tin JOIN_ROOM mỗi 650ms trong lúc chờ bắt tay
     this.joinRetryTimer = setInterval(() => {
-      sendJoinPacket();
-    }, 650);
+      if (!isConnectedOrDone) {
+        sendJoinPacket();
+        tryServerJoin();
+      }
+    }, 800);
   }
 
   /**
@@ -533,10 +715,24 @@ class P2PService {
         window.localStorage.setItem(STORAGE_SYNC_KEY, JSON.stringify(packet));
       } catch {}
     }
+
+    // 4. Gửi qua Server Relay (Đảm bảo 100% xuyên mọi loại mạng 4G/5G/WiFi mà không phụ thuộc NAT)
+    if (this.currentRoomId && typeof window !== 'undefined') {
+      fetch('/api/lobby/room/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId: this.currentRoomId,
+          sender: this.isHost ? 'host' : 'guest',
+          data: packet,
+        }),
+      }).catch(() => {});
+    }
   }
 
   public disconnect() {
     this.cleanupPeerOnly();
+    this.stopServerPolling();
     this.currentRoomId = null;
     this.isConnected = false;
     this.isHost = false;

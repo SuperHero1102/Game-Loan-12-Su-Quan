@@ -32,6 +32,10 @@ const DEFAULT_PROFILE: PlayerProfile = {
   currentStageNumber: 1,
   defeatedWarlords: [],
   lives: 3,
+  hasCompletedCampaign: false,
+  coronationViewed: false,
+  prestigeLevel: 0,
+  unlockedEmperorSkin: false,
 };
 
 const DEFAULT_SETTINGS: GameSettings = {
