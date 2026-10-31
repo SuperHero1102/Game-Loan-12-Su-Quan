@@ -259,6 +259,7 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
   const [extraTurnAlert, setExtraTurnAlert] = useState(false);
   const [comboAlert, setComboAlert] = useState(0);
   const [boardVfx, setBoardVfx] = useState<BoardVfx[]>([]);
+  const [clearingCoords, setClearingCoords] = useState<{ r: number; c: number }[]>([]);
 
   // Keypad & D-Pad State
   const [dpadCursor, setDpadCursor] = useState<{ r: number; c: number }>({ r: 3, c: 3 });
@@ -413,24 +414,22 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
         tempBoard[r2][c2] = { ...t1, row: r2, col: c2 };
       }
 
-      // Resolve matches and gravity cascade with deterministic moveSeed and swapContext
+      // 1. Phản hồi thị giác tức thì nước hoán đổi
+      setBoard(tempBoard);
+      soundEngine.playGemSlide();
+
+      // 2. Giải mã tầng nổ và trọng lực rơi từng bước
       const result = resolveCascade(tempBoard, moveSeed, { r1, c1, r2, c2 });
-      setBoard(result.newBoard);
 
-      if (result.vfxEvents && result.vfxEvents.length > 0) {
-        setBoardVfx(result.vfxEvents);
-        const hasLightning = result.vfxEvents.some((v) => v.type === 'lightning');
-        if (hasLightning) {
-          soundEngine.playThunderExtraTurn();
-        }
-        safeTimeout(() => {
-          setBoardVfx([]);
-        }, 750);
-      }
+      // 3. Hàm thực thi tính toán sát thương & hoạt cảnh tướng sau khi chuỗi ăn hoàn tất
+      const finishCombatResolution = () => {
+        setBoard(result.newBoard);
+        setClearingCoords([]);
+        setBoardVfx([]);
 
-      const turnSide = currentTurnRef.current;
-      const nextP1 = { ...player1Ref.current };
-      const nextP2 = { ...player2Ref.current };
+        const turnSide = currentTurnRef.current;
+        const nextP1 = { ...player1Ref.current };
+        const nextP2 = { ...player2Ref.current };
 
       const activeFighter = turnSide === 'p1' ? nextP1 : nextP2;
       const defenderFighter = turnSide === 'p1' ? nextP2 : nextP1;
@@ -651,8 +650,58 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
           setCurrentTurn((prev) => (prev === 'p1' ? 'p2' : 'p1'));
         }
       }, 660);
-    },
-    [gameMode, diffTuning.dmgMultiplier, addFloatingText, safeTimeout, triggerVictoryConfetti]
+    };
+
+    // 4. Kích hoạt chuỗi hoạt ảnh từng bước cascade:
+    // Pha 1: Các quân cờ khớp ăn lóe sáng và bùng nổ hiệu ứng (nổ/sét/chém/tinh thể)
+    // Pha 2: Các quân cờ trên cao rơi xuống lấp đầy ô trống theo trọng lực
+    // Pha 3: Nếu tạo thành combo tầng tiếp theo, lặp lại hiệu ứng tầng mới trước khi tướng xuất chiêu
+    const steps = result.steps && result.steps.length > 0 ? result.steps : [];
+    if (steps.length === 0) {
+      finishCombatResolution();
+      return;
+    }
+
+    let stepIdx = 0;
+    const runStep = () => {
+      if (stepIdx >= steps.length) {
+        finishCombatResolution();
+        return;
+      }
+
+      const currentStep = steps[stepIdx];
+      setBoard(currentStep.boardBeforeClear);
+      setClearingCoords(currentStep.clearedCoords);
+      setBoardVfx(currentStep.vfxEvents);
+
+      const hasLightning = currentStep.vfxEvents.some((v) => v.type === 'lightning');
+      const hasExplosion = currentStep.vfxEvents.some((v) => v.type === 'explosion');
+      if (hasLightning) {
+        soundEngine.playThunderExtraTurn();
+      } else if (hasExplosion) {
+        soundEngine.playWeaponClash();
+      }
+
+      if (currentStep.combo > 1) {
+        setComboAlert(currentStep.combo);
+        soundEngine.playChiGathering();
+      }
+
+      // Pha 2: Quân cờ rơi xuống theo trọng lực (240ms)
+      safeTimeout(() => {
+        setBoard(currentStep.boardAfterGravity);
+        setClearingCoords([]);
+        setBoardVfx([]);
+
+        stepIdx++;
+        // Pha 3: Ổn định trước đợt cascade tiếp theo hoặc xuất chiêu tướng (180ms)
+        safeTimeout(runStep, 180);
+      }, 240);
+    };
+
+    runStep();
+  },
+  [gameMode, diffTuning.dmgMultiplier, addFloatingText, safeTimeout, triggerVictoryConfetti]
   );
 
   // Execute Ultimate Martial Art Skill Cast (3D Cutscene + Heavy Strike + P2P Sync)
@@ -1034,6 +1083,7 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
           comboAlert={comboAlert}
           gameMode={gameMode}
           vfxEvents={boardVfx}
+          clearingCoords={clearingCoords}
         />
       </div>
 

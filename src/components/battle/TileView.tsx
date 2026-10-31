@@ -11,6 +11,7 @@ interface TileViewProps {
   tile: Tile;
   isSelected: boolean;
   isTargetHint?: boolean;
+  isClearing?: boolean;
   onClick: () => void;
   onPointerDown?: (e: React.PointerEvent) => void;
 }
@@ -19,6 +20,7 @@ export const TileView: React.FC<TileViewProps> = ({
   tile,
   isSelected,
   isTargetHint,
+  isClearing = false,
   onClick,
   onPointerDown,
 }) => {
@@ -175,8 +177,10 @@ export const TileView: React.FC<TileViewProps> = ({
       type="button"
       onClick={onClick}
       onPointerDown={onPointerDown}
-      className={`relative w-full aspect-square rounded-md flex items-center justify-center transition-all duration-150 select-none cursor-pointer ${
-        isSelected
+      className={`relative w-full aspect-square rounded-md flex items-center justify-center transition-all duration-200 select-none cursor-pointer ${
+        isClearing
+          ? 'opacity-15 scale-75 filter brightness-150 animate-pulse'
+          : isSelected
           ? 'ring-3 ring-amber-400 bg-amber-950/70 scale-105 z-10 shadow-lg shadow-amber-500/40'
           : isTargetHint
           ? 'bg-stone-800/80 ring-2 ring-emerald-400/80'

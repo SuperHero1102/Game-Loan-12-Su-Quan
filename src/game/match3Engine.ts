@@ -34,6 +34,14 @@ export interface BoardVfx {
   isSpecial?: boolean;
 }
 
+export interface CascadeStep {
+  combo: number;
+  boardBeforeClear: Tile[][];
+  clearedCoords: { r: number; c: number }[];
+  vfxEvents: BoardVfx[];
+  boardAfterGravity: Tile[][];
+}
+
 export interface MatchTurnResult {
   newBoard: Tile[][];
   totalSwords: number;
@@ -49,6 +57,7 @@ export interface MatchTurnResult {
   clearedTileCount: number;
   specialExplosions: number;
   vfxEvents: BoardVfx[];
+  steps: CascadeStep[];
 }
 
 let nextTileId = 1;
@@ -287,6 +296,7 @@ export const resolveCascade = (
   let specialExplosions = 0;
   const harvestedCoords = new Set<string>();
   const vfxEvents: BoardVfx[] = [];
+  const steps: CascadeStep[] = [];
 
   // Hàm cộng điểm/tài nguyên chuẩn xác cho từng ô bị tiêu diệt
   const harvestTile = (t: Tile) => {
@@ -322,6 +332,8 @@ export const resolveCascade = (
     if (tileA && tileB && (tileA.special !== 'NORMAL' || tileB.special !== 'NORMAL')) {
       initialSpecialTriggered = true;
       const initialRemoval = new Set<string>();
+      const stepVfx: BoardVfx[] = [];
+      const boardBeforeClear = currentBoard.map((row) => row.map((t) => ({ ...t })));
 
       // Sét 5 viên (LIGHTNING_5): Quét toàn bộ loại ngọc mục tiêu hoặc quét chữ thập hàng ngang + hàng dọc
       if (tileA.special === 'LIGHTNING_5' || tileB.special === 'LIGHTNING_5') {
@@ -337,14 +349,16 @@ export const resolveCascade = (
         const lRow = tileA.special === 'LIGHTNING_5' ? r1 : r2;
         const lCol = tileA.special === 'LIGHTNING_5' ? c1 : c2;
 
-        vfxEvents.push({
+        const initLightningVfx: BoardVfx = {
           id: `vfx_init_lightning_${lRow}_${lCol}_${vfxEvents.length}`,
           r: lRow,
           c: lCol,
           type: 'lightning',
           tileType: targetType || 'YIN_YANG',
           isSpecial: true,
-        });
+        };
+        vfxEvents.push(initLightningVfx);
+        stepVfx.push(initLightningVfx);
 
         if (targetType) {
           // Quét toàn bộ các ô cùng loại trên bàn cờ
@@ -352,14 +366,16 @@ export const resolveCascade = (
             for (let c = 0; c < GRID_COLS; c++) {
               if (currentBoard[r][c].type === targetType) {
                 initialRemoval.add(`${r},${c}`);
-                vfxEvents.push({
+                const v: BoardVfx = {
                   id: `vfx_target_lightning_${r}_${c}_${vfxEvents.length}`,
                   r,
                   c,
                   type: 'lightning',
                   tileType: targetType,
                   isSpecial: false,
-                });
+                };
+                vfxEvents.push(v);
+                stepVfx.push(v);
               }
             }
           }
@@ -368,27 +384,31 @@ export const resolveCascade = (
         for (let nc = 0; nc < GRID_COLS; nc++) {
           initialRemoval.add(`${lRow},${nc}`);
           if (nc % 2 === 0) {
-            vfxEvents.push({
+            const v: BoardVfx = {
               id: `vfx_row_lightning_${lRow}_${nc}_${vfxEvents.length}`,
               r: lRow,
               c: nc,
               type: 'lightning',
               tileType: 'YIN_YANG',
               isSpecial: true,
-            });
+            };
+            vfxEvents.push(v);
+            stepVfx.push(v);
           }
         }
         for (let nr = 0; nr < GRID_ROWS; nr++) {
           initialRemoval.add(`${nr},${lCol}`);
           if (nr % 2 === 0) {
-            vfxEvents.push({
+            const v: BoardVfx = {
               id: `vfx_col_lightning_${nr}_${lCol}_${vfxEvents.length}`,
               r: nr,
               c: lCol,
               type: 'lightning',
               tileType: 'YIN_YANG',
               isSpecial: true,
-            });
+            };
+            vfxEvents.push(v);
+            stepVfx.push(v);
           }
         }
         initialRemoval.add(`${r1},${c1}`);
@@ -400,14 +420,16 @@ export const resolveCascade = (
         const bRow = tileA.special === 'BOMB_4' ? r1 : r2;
         const bCol = tileA.special === 'BOMB_4' ? c1 : c2;
 
-        vfxEvents.push({
+        const initBombVfx: BoardVfx = {
           id: `vfx_init_bomb_${bRow}_${bCol}_${vfxEvents.length}`,
           r: bRow,
           c: bCol,
           type: 'explosion',
           tileType: 'GOLD',
           isSpecial: true,
-        });
+        };
+        vfxEvents.push(initBombVfx);
+        stepVfx.push(initBombVfx);
 
         for (let dr = -1; dr <= 1; dr++) {
           for (let dc = -1; dc <= 1; dc++) {
@@ -415,14 +437,16 @@ export const resolveCascade = (
             const nc = bCol + dc;
             if (nr >= 0 && nr < GRID_ROWS && nc >= 0 && nc < GRID_COLS) {
               initialRemoval.add(`${nr},${nc}`);
-              vfxEvents.push({
+              const v: BoardVfx = {
                 id: `vfx_bomb_area_${nr}_${nc}_${vfxEvents.length}`,
                 r: nr,
                 c: nc,
                 type: 'explosion',
                 tileType: currentBoard[nr][nc].type,
                 isSpecial: false,
-              });
+              };
+              vfxEvents.push(v);
+              stepVfx.push(v);
             }
           }
         }
@@ -468,6 +492,18 @@ export const resolveCascade = (
           writeRow--;
         }
       }
+
+      steps.push({
+        combo: 1,
+        boardBeforeClear,
+        clearedCoords: Array.from(initialRemoval).map((s) => {
+          const [r, c] = s.split(',').map(Number);
+          return { r, c };
+        }),
+        vfxEvents: stepVfx,
+        boardAfterGravity: (nextBoard as Tile[][]).map((row) => row.map((t) => ({ ...t }))),
+      });
+
       currentBoard = nextBoard as Tile[][];
     }
   }
@@ -478,7 +514,8 @@ export const resolveCascade = (
     if (matches.length === 0) break;
 
     comboCount++;
-
+    const boardBeforeClear = currentBoard.map((row) => row.map((t) => ({ ...t })));
+    const stepVfx: BoardVfx[] = [];
     const tilesToRemove = new Set<string>();
     const specialToSpawn: {
       r: number;
@@ -514,14 +551,16 @@ export const resolveCascade = (
             ? 'slash'
             : 'burst';
 
-        vfxEvents.push({
+        const v: BoardVfx = {
           id: `vfx_${comboCount}_${coord.row}_${coord.col}_${vfxEvents.length}`,
           r: coord.row,
           c: coord.col,
           type: vfxType,
           tileType: group.type,
           isSpecial: group.tiles.length >= 4,
-        });
+        };
+        vfxEvents.push(v);
+        stepVfx.push(v);
 
         // Tạo ngọc đặc biệt tại điểm giữa của dãy ăn
         if (idx === midIdx) {
@@ -558,14 +597,17 @@ export const resolveCascade = (
 
       if (target.special === 'BOMB_4') {
         specialExplosions++;
-        vfxEvents.push({
+        const bombChainVfx: BoardVfx = {
           id: `vfx_bomb_chain_${r}_${c}_${vfxEvents.length}`,
           r,
           c,
           type: 'explosion',
           tileType: target.type,
           isSpecial: true,
-        });
+        };
+        vfxEvents.push(bombChainVfx);
+        stepVfx.push(bombChainVfx);
+
         for (let dr = -1; dr <= 1; dr++) {
           for (let dc = -1; dc <= 1; dc++) {
             const nr = r + dr;
@@ -575,41 +617,48 @@ export const resolveCascade = (
               if (!tilesToRemove.has(k)) {
                 tilesToRemove.add(k);
                 newlyExploded.add(k);
-                vfxEvents.push({
+                const bombWaveVfx: BoardVfx = {
                   id: `vfx_bomb_wave_${nr}_${nc}_${vfxEvents.length}`,
                   r: nr,
                   c: nc,
                   type: 'explosion',
                   tileType: currentBoard[nr][nc]?.type || 'GOLD',
                   isSpecial: false,
-                });
+                };
+                vfxEvents.push(bombWaveVfx);
+                stepVfx.push(bombWaveVfx);
               }
             }
           }
         }
       } else if (target.special === 'LIGHTNING_5') {
         specialExplosions++;
-        vfxEvents.push({
+        const lightChainVfx: BoardVfx = {
           id: `vfx_light_chain_${r}_${c}_${vfxEvents.length}`,
           r,
           c,
           type: 'lightning',
           tileType: target.type,
           isSpecial: true,
-        });
+        };
+        vfxEvents.push(lightChainVfx);
+        stepVfx.push(lightChainVfx);
+
         for (let nc = 0; nc < GRID_COLS; nc++) {
           const k = `${r},${nc}`;
           if (!tilesToRemove.has(k)) {
             tilesToRemove.add(k);
             newlyExploded.add(k);
-            vfxEvents.push({
+            const lightWaveVfx: BoardVfx = {
               id: `vfx_light_wave_${r}_${nc}_${vfxEvents.length}`,
               r,
               c: nc,
               type: 'lightning',
               tileType: 'YIN_YANG',
               isSpecial: false,
-            });
+            };
+            vfxEvents.push(lightWaveVfx);
+            stepVfx.push(lightWaveVfx);
           }
         }
         for (let nr = 0; nr < GRID_ROWS; nr++) {
@@ -617,14 +666,16 @@ export const resolveCascade = (
           if (!tilesToRemove.has(k)) {
             tilesToRemove.add(k);
             newlyExploded.add(k);
-            vfxEvents.push({
+            const lightColWaveVfx: BoardVfx = {
               id: `vfx_light_wave_${nr}_${c}_${vfxEvents.length}`,
               r: nr,
               c,
               type: 'lightning',
               tileType: 'YIN_YANG',
               isSpecial: false,
-            });
+            };
+            vfxEvents.push(lightColWaveVfx);
+            stepVfx.push(lightColWaveVfx);
           }
         }
       }
@@ -688,6 +739,17 @@ export const resolveCascade = (
       }
     });
 
+    steps.push({
+      combo: comboCount,
+      boardBeforeClear,
+      clearedCoords: Array.from(tilesToRemove).map((s) => {
+        const [r, c] = s.split(',').map(Number);
+        return { r, c };
+      }),
+      vfxEvents: stepVfx,
+      boardAfterGravity: (nextBoard as Tile[][]).map((row) => row.map((t) => ({ ...t }))),
+    });
+
     currentBoard = nextBoard as Tile[][];
     if (comboCount > 15) break;
   }
@@ -711,6 +773,7 @@ export const resolveCascade = (
     clearedTileCount,
     specialExplosions,
     vfxEvents: vfxEvents.slice(0, 48),
+    steps,
   };
 };
 

@@ -289,8 +289,8 @@ export const BattleStage2D: React.FC<BattleStage2DProps> = ({
         </div>
       </div>
 
-      {/* 2. SÀN ĐẤU 3D TÁCH BIỆT PHÍA DƯỚI KHUNG HUD */}
-      <div className="relative flex-1 min-h-[125px] w-full overflow-hidden flex items-end justify-between px-3 sm:px-6 pb-1.5 z-10 pointer-events-none">
+      {/* 2. SÀN ĐẤU 3D TÁCH BIỆT PHÍA DƯỚI KHUNG HUD - CĂN ĐỀU LỀ TRÊN LỀ DƯỚI */}
+      <div className="relative flex-1 min-h-[135px] w-full overflow-hidden flex items-center justify-between px-3 sm:px-6 py-2.5 z-10 pointer-events-none">
         {/* NỀN CHIẾN TRƯỜNG CỔ ĐẠI HOA LƯ */}
         <div
           className="absolute inset-0 bg-cover bg-center pointer-events-none"
@@ -310,7 +310,7 @@ export const BattleStage2D: React.FC<BattleStage2DProps> = ({
 
         {/* TƯỚNG BÊN TRÁI (QUÂN TA) */}
         <div
-          className="relative flex flex-col items-center transition-all duration-300 ease-out z-20"
+          className="relative flex flex-col items-center justify-center transition-all duration-300 ease-out z-20 my-auto"
           style={{
             transform: getLeftCombatTransform(),
             transformOrigin: 'bottom center',
@@ -322,9 +322,9 @@ export const BattleStage2D: React.FC<BattleStage2DProps> = ({
           )}
 
           {/* Vòng hào quang chân đế dưới vó thú */}
-          <div className="absolute bottom-1 w-28 sm:w-36 h-5 rounded-[100%] bg-black/75 blur-[2px] pointer-events-none" />
+          <div className="absolute bottom-0 w-28 sm:w-36 h-5 rounded-[100%] bg-black/75 blur-[2px] pointer-events-none" />
           <div
-            className={`absolute bottom-1 w-24 sm:w-32 h-4 rounded-[100%] border transition-all pointer-events-none ${
+            className={`absolute bottom-0 w-24 sm:w-32 h-4 rounded-[100%] border transition-all pointer-events-none ${
               isLeftTurn
                 ? 'border-amber-400/90 shadow-[0_0_14px_rgba(251,191,36,0.8)]'
                 : 'border-amber-700/35'
@@ -332,7 +332,7 @@ export const BattleStage2D: React.FC<BattleStage2DProps> = ({
           />
 
           {/* Tạo Hình Tướng & Linh Thú 3D Gốc Sống Động */}
-          <div className="relative w-36 sm:w-44 h-36 sm:h-44 flex items-end justify-center">
+          <div className="relative w-36 sm:w-44 h-36 sm:h-44 flex items-center justify-center my-auto">
             <CombatGeneralRig
               fighter={leftFighter}
               warlord={leftWarlordData}
@@ -459,7 +459,7 @@ export const BattleStage2D: React.FC<BattleStage2DProps> = ({
 
         {/* TƯỚNG BÊN PHẢI (QUÂN ĐỊCH) */}
         <div
-          className="relative flex flex-col items-center transition-all duration-300 ease-out z-20"
+          className="relative flex flex-col items-center justify-center transition-all duration-300 ease-out z-20 my-auto"
           style={{
             transform: getRightCombatTransform(),
             transformOrigin: 'bottom center',
@@ -469,9 +469,9 @@ export const BattleStage2D: React.FC<BattleStage2DProps> = ({
             <div className="absolute bottom-2 -right-6 w-24 h-6 rounded-full bg-gradient-to-l from-red-500/60 to-transparent blur-sm pointer-events-none animate-pulse" />
           )}
 
-          <div className="absolute bottom-1 w-28 sm:w-36 h-5 rounded-[100%] bg-black/75 blur-[2px] pointer-events-none" />
+          <div className="absolute bottom-0 w-28 sm:w-36 h-5 rounded-[100%] bg-black/75 blur-[2px] pointer-events-none" />
           <div
-            className={`absolute bottom-1 w-24 sm:w-32 h-4 rounded-[100%] border transition-all pointer-events-none ${
+            className={`absolute bottom-0 w-24 sm:w-32 h-4 rounded-[100%] border transition-all pointer-events-none ${
               isRightTurn
                 ? 'border-rose-400/90 shadow-[0_0_14px_rgba(244,63,94,0.8)]'
                 : 'border-rose-900/35'
@@ -479,7 +479,7 @@ export const BattleStage2D: React.FC<BattleStage2DProps> = ({
           />
 
           {/* Tạo Hình Tướng & Linh Thú 3D Gốc Sống Động */}
-          <div className="relative w-36 sm:w-44 h-36 sm:h-44 flex items-end justify-center">
+          <div className="relative w-36 sm:w-44 h-36 sm:h-44 flex items-center justify-center my-auto">
             <CombatGeneralRig
               fighter={rightFighter}
               warlord={rightWarlordData}

@@ -20,6 +20,7 @@ interface Match3BoardProps {
   isMyTurn?: boolean;
   gameMode?: string;
   vfxEvents?: BoardVfx[];
+  clearingCoords?: { r: number; c: number }[];
 }
 
 export const Match3Board: React.FC<Match3BoardProps> = ({
@@ -33,6 +34,7 @@ export const Match3Board: React.FC<Match3BoardProps> = ({
   isMyTurn = true,
   gameMode,
   vfxEvents = [],
+  clearingCoords = [],
 }) => {
   const touchStartRef = useRef<{ x: number; y: number; r: number; c: number } | null>(null);
 
@@ -149,6 +151,7 @@ export const Match3Board: React.FC<Match3BoardProps> = ({
             const isNeighborHint =
               selectedCoord &&
               areAdjacent(selectedCoord.r, selectedCoord.c, r, c);
+            const isClearing = clearingCoords.some((coord) => coord.r === r && coord.c === c);
 
             return (
               <TileView
@@ -156,6 +159,7 @@ export const Match3Board: React.FC<Match3BoardProps> = ({
                 tile={tile}
                 isSelected={isSelected}
                 isTargetHint={!!isNeighborHint}
+                isClearing={isClearing}
                 onClick={() => {
                   if (!isInteractable) return;
                   if (!selectedCoord) {

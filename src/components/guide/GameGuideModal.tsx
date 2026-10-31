@@ -558,99 +558,364 @@ export const GameGuideModal: React.FC<GameGuideModalProps> = ({ onClose }) => {
           {/* ===================================================================
               MỤC 2 (TIẾP NỐI BÊN DƯỚI): QUY TẮC MATCH-3 & HỆ THỐNG TƯỚNG 3D
              =================================================================== */}
-          <div ref={rulesSectionRef} className="space-y-3 pt-2 border-t border-amber-900/60">
-            <div className="flex items-center gap-2 text-amber-300 font-black text-xs sm:text-sm uppercase tracking-wide">
-              <Swords className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>MỤC 2: QUY TẮC BÀN CỜ MATCH-3 &amp; HỆ THỐNG TƯỚNG 3D</span>
+          <div ref={rulesSectionRef} className="space-y-3.5 pt-3 border-t border-amber-900/60">
+            <div className="flex items-center justify-between border-b border-amber-800/60 pb-1.5">
+              <div className="flex items-center gap-2 text-amber-300 font-black text-xs sm:text-sm uppercase tracking-wide">
+                <Swords className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>MỤC 2: QUY TẮC BÀN CỜ MATCH-3 &amp; HỆ THỐNG TƯỚNG 3D</span>
+              </div>
+              <span className="text-[10px] text-yellow-300 font-bold bg-amber-950/80 px-2 py-0.5 rounded border border-amber-700/60">
+                Chuẩn Game 8x8
+              </span>
             </div>
 
-            {/* Điều khiển bàn cờ 8x8 & Thêm Lượt */}
-            <div className="flex items-start gap-2.5 p-2.5 bg-amber-950/70 rounded-xl border border-amber-600/70 shadow">
-              <span className="text-xl shrink-0">👆</span>
-              <div>
-                <strong className="text-amber-300 text-xs block">
-                  Điều Khiển Bàn Cờ 8x8 &amp; Thêm Lượt Đánh:
-                </strong>
-                <p className="text-[11px] text-stone-200 mt-0.5 leading-relaxed">
-                  <strong>Vuốt ngón tay hoặc chạm 2 ô liền kề để hoán đổi</strong> tạo hàng hoặc cột từ 3 viên giống nhau trở lên. Đặc biệt: <strong>Ghép 4 hoặc 5 viên cùng lúc sẽ nhận ngay Thêm Lượt Đánh</strong> (giữ quyền đi tiếp)!
+            {/* 1. ĐIỀU KHIỂN & CƠ CHẾ ĂN DÃY */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="p-3 bg-gradient-to-br from-amber-950/75 via-stone-900 to-stone-950 rounded-xl border border-amber-600/70 shadow space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">👆</span>
+                  <strong className="text-amber-300 text-xs">
+                    Thao Tác Vuốt &amp; Chạm Hoán Đổi:
+                  </strong>
+                </div>
+                <p className="text-[11px] text-stone-200 leading-relaxed">
+                  • <strong>Vuốt ngón tay (Swipe)</strong> hoặc <strong>chạm lần lượt 2 ô kề nhau</strong> (ngang/dọc) để đổi chỗ tạo thành hàng hoặc cột từ <strong>3 ô cùng loại trở lên</strong>.
+                  <br />
+                  • <strong>Kích nổ trực tiếp:</strong> Ô có chứa <strong>Bom 💣</strong> hoặc <strong>Sét ⚡</strong> có thể chạm hoặc hoán đổi với bất kỳ ô lân cận nào để <em>phát nổ ngay lập tức</em> mà không cần tạo dãy 3.
+                </p>
+              </div>
+
+              <div className="p-3 bg-gradient-to-br from-yellow-950/75 via-stone-900 to-stone-950 rounded-xl border border-yellow-500/70 shadow space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">⚡</span>
+                  <strong className="text-yellow-300 text-xs">
+                    Cơ Chế Ăn Dãy 4 - 5 &amp; Thêm Lượt:
+                  </strong>
+                </div>
+                <p className="text-[11px] text-stone-200 leading-relaxed">
+                  • <strong>Ăn 3 viên:</strong> Thu hoạch điểm tài nguyên cơ bản.
+                  <br />
+                  • <strong>Ăn 4 viên:</strong> Nhận ngay <strong>⚡ THÊM LƯỢT ĐÁNH</strong> + Tạo ra <strong>💣 Ngọc Bom Nổ 4 Ô (BOMB_4)</strong>.
+                  <br />
+                  • <strong>Ăn 5 đến 6 viên trở lên:</strong> Nhận <strong>⚡ THÊM LƯỢT ĐÁNH</strong> + Tạo ra <strong>⚡ Ngọc Sấm Sét 5 Ô (LIGHTNING_5)</strong> quét diện rộng!
                 </p>
               </div>
             </div>
 
-            {/* Huyết Kiếm */}
-            <div className="flex items-start gap-2.5 p-2.5 bg-red-950/70 rounded-xl border border-red-600/70 shadow">
-              <span className="text-xl shrink-0">🗡️</span>
-              <div>
-                <strong className="text-red-400 text-xs block">
-                  Huyết Kiếm (Kiếm Đỏ Thẫm) — Bạo Kích &amp; Xuyên Giáp:
-                </strong>
-                <p className="text-[11px] text-stone-200 mt-0.5 leading-relaxed">
-                  Xuất hiện ngẫu nhiên hoặc tạo ra khi ghép từ 4 ô kiếm trở lên. Gây <strong>Sát thương Bạo Kích x2</strong> và <strong>xuyên thẳng 50% Giáp</strong> đối thủ!
-                </p>
+            {/* 2. HIỆU ỨNG ĐỒ HỌA SỐNG ĐỘNG TRÊN BÀN CỜ */}
+            <div className="p-3 bg-stone-950/90 rounded-xl border border-amber-800/80 shadow space-y-2">
+              <div className="flex items-center gap-2 text-xs font-bold text-amber-300 uppercase">
+                <span className="text-base">✨</span>
+                <span>Hệ Thống Hiệu Ứng Bàn Cờ Sống Động (VFX):</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
+                <div className="p-2 rounded-lg bg-stone-900/90 border border-orange-500/50 flex flex-col items-center text-center">
+                  <span className="text-xl mb-0.5 animate-bounce">💥</span>
+                  <strong className="text-orange-300">Nổ Hỏa Diệm</strong>
+                  <span className="text-stone-400 text-[9px] mt-0.5">Sóng xung kích lửa nổ 3x3 khi kích Bom 4</span>
+                </div>
+                <div className="p-2 rounded-lg bg-stone-900/90 border border-cyan-500/50 flex flex-col items-center text-center">
+                  <span className="text-xl mb-0.5 animate-pulse">⚡</span>
+                  <strong className="text-cyan-300">Sét Điện Quang</strong>
+                  <span className="text-stone-400 text-[9px] mt-0.5">Tia chớp vàng thiên thanh quét chữ thập khi ăn 5+</span>
+                </div>
+                <div className="p-2 rounded-lg bg-stone-900/90 border border-red-500/50 flex flex-col items-center text-center">
+                  <span className="text-xl mb-0.5">⚔️</span>
+                  <strong className="text-red-300">Vệt Kiếm Chém</strong>
+                  <span className="text-stone-400 text-[9px] mt-0.5">Vết chém đỏ thẫm sắc lẹm khi ghép Đoản Kiếm</span>
+                </div>
+                <div className="p-2 rounded-lg bg-stone-900/90 border border-yellow-500/50 flex flex-col items-center text-center">
+                  <span className="text-xl mb-0.5">✨</span>
+                  <strong className="text-yellow-300">Tinh Thể Tỏa Sáng</strong>
+                  <span className="text-stone-400 text-[9px] mt-0.5">Hào quang ngũ hành khi thu hoạch tài nguyên</span>
+                </div>
               </div>
             </div>
 
-            {/* Đầy đủ 6 Loại Ngọc trên Ma Trận 8x8 */}
-            <div className="space-y-1.5">
-              <div className="text-[11px] font-black text-amber-300 uppercase tracking-wide">
-                Bảng Chú Giải Đầy Đủ 6 Loại Ngọc Trên Ma Trận 8x8:
+            {/* 3. BẢNG CHÚ GIẢI CHI TIẾT 9 LOẠI NGỌC & VẬT PHẨM THỰC TẾ (KÈM ICON SVG CHUẨN XÁC) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-[11px] font-black text-amber-300 uppercase tracking-wide flex items-center gap-1.5">
+                  <Crown className="w-3.5 h-3.5 text-yellow-400" />
+                  <span>BẢNG CHÚ GIẢI HÌNH ẢNH 9 LOẠI NGỌC &amp; VẬT PHẨM THỰC TẾ:</span>
+                </div>
+                <span className="text-[9px] text-stone-400 italic">Mô phỏng 100% hình ảnh trong trận</span>
               </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                <div className="p-2.5 bg-stone-950 rounded-xl border border-stone-800">
-                  <strong className="text-stone-100 block">1. ⚔️ Đoản Kiếm Thép (Công Kích):</strong>
-                  <p className="text-stone-400 mt-0.5 leading-snug">
-                    Gây sát thương vật lý trực tiếp kèm hoạt ảnh 3D thần binh đặc trưng của từng tướng. Ghép 4+ kiếm tạo ra <strong>Huyết Kiếm</strong> đỏ thẫm.
-                  </p>
+                {/* 1. ĐOẢN KIẾM THÉP */}
+                <div className="p-2.5 bg-stone-950 rounded-xl border border-stone-800 flex gap-2.5 items-start hover:border-amber-700/60 transition">
+                  <div className="w-10 h-10 rounded-lg bg-stone-900 border border-stone-700 flex items-center justify-center shadow shrink-0">
+                    <svg viewBox="0 0 48 48" className="w-7 h-7 -rotate-45 drop-shadow">
+                      <path d="M24 4 L28 10 L27 34 L24 38 L21 34 L20 10 Z" fill="#e2e8f0" stroke="#475569" strokeWidth="1.5" />
+                      <line x1="24" y1="8" x2="24" y2="34" stroke="#94a3b8" strokeWidth="1" />
+                      <rect x="15" y="34" width="18" height="4" rx="1.5" fill="#ca8a04" stroke="#854d0e" strokeWidth="1" />
+                      <rect x="22" y="38" width="4" height="8" rx="1" fill="#dc2626" stroke="#991b1b" strokeWidth="1" />
+                      <circle cx="24" cy="46" r="2.5" fill="#ca8a04" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <strong className="text-stone-100 flex items-center gap-1">
+                      <span>1. Đoản Kiếm Thép</span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-stone-800 text-stone-300">Công Kích</span>
+                    </strong>
+                    <p className="text-stone-400 mt-0.5 leading-snug text-[10.5px]">
+                      Gây <strong>sát thương vật lý trực tiếp</strong> lên đối thủ dựa theo chỉ số ATK của tướng. Kèm âm thanh va đập vũ khí và tiếng ngựa hý dồn dập.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="p-2.5 bg-stone-950 rounded-xl border border-stone-800">
-                  <strong className="text-rose-400 block">2. ❤️ Trái Tim Đỏ (Sinh Lực HP):</strong>
-                  <p className="text-stone-400 mt-0.5 leading-snug">
-                    Hồi phục trực tiếp thanh Máu (HP - thanh đỏ) trên đỉnh màn hình đối kháng (+30 HP mỗi viên).
-                  </p>
+                {/* 2. HUYẾT KIẾM (KIẾM ĐỎ THẪM) */}
+                <div className="p-2.5 bg-red-950/50 rounded-xl border border-red-600/80 flex gap-2.5 items-start shadow hover:border-red-500 transition">
+                  <div className="relative w-10 h-10 rounded-lg bg-red-950/80 border border-red-500 flex items-center justify-center shadow shadow-red-500/30 shrink-0">
+                    <div className="absolute inset-1 rounded-full bg-red-600/30 blur-[2px] animate-pulse" />
+                    <svg viewBox="0 0 48 48" className="w-7 h-7 -rotate-45 drop-shadow-[0_0_4px_#ef4444]">
+                      <defs>
+                        <linearGradient id="bloodGuide" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="#fca5a5" />
+                          <stop offset="30%" stopColor="#dc2626" />
+                          <stop offset="100%" stopColor="#7f1d1d" />
+                        </linearGradient>
+                      </defs>
+                      <path d="M24 3 L29 10 L28 34 L24 39 L20 34 L19 10 Z" fill="url(#bloodGuide)" stroke="#f87171" strokeWidth="1.5" />
+                      <line x1="24" y1="6" x2="24" y2="34" stroke="#fef08a" strokeWidth="1.2" />
+                      <rect x="14" y="34" width="20" height="4.5" rx="1.5" fill="#facc15" stroke="#ca8a04" strokeWidth="1" />
+                      <rect x="22" y="38.5" width="4" height="8" rx="1" fill="#18181b" stroke="#71717a" strokeWidth="1" />
+                      <circle cx="24" cy="47" r="2.5" fill="#facc15" />
+                    </svg>
+                    <span className="absolute bottom-0 right-0.5 text-[8px] font-black text-yellow-300">x2</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <strong className="text-red-300 flex items-center gap-1">
+                      <span>2. Huyết Kiếm Đỏ Thẫm</span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-red-900 text-yellow-300">Bạo Kích x2</span>
+                    </strong>
+                    <p className="text-stone-300 mt-0.5 leading-snug text-[10.5px]">
+                      Sinh ra khi ghép 4+ ô Kiếm hoặc ngẫu nhiên (8%). Gây <strong>Sát thương Bạo Kích x2</strong> và <strong>xuyên thủng 50% Giáp</strong> đối phương!
+                    </p>
+                  </div>
                 </div>
 
-                <div className="p-2.5 bg-stone-950 rounded-xl border border-stone-800">
-                  <strong className="text-emerald-400 block">3. 🟩 Bánh Chưng Xanh (Hộ Giáp DEF):</strong>
-                  <p className="text-stone-400 mt-0.5 leading-snug">
-                    Tăng thanh Giáp xanh lá (+16 Giáp mỗi viên) giúp hấp thụ sát thương trước khi trừ vào Máu.
-                  </p>
+                {/* 3. TRÁI TIM ĐỎ */}
+                <div className="p-2.5 bg-stone-950 rounded-xl border border-stone-800 flex gap-2.5 items-start hover:border-rose-700/60 transition">
+                  <div className="w-10 h-10 rounded-lg bg-stone-900 border border-rose-900/60 flex items-center justify-center shadow shrink-0">
+                    <svg viewBox="0 0 48 48" className="w-7 h-7 drop-shadow">
+                      <defs>
+                        <radialGradient id="heartGuideGrad" cx="35%" cy="35%" r="70%">
+                          <stop offset="0%" stopColor="#fda4af" />
+                          <stop offset="40%" stopColor="#f43f5e" />
+                          <stop offset="100%" stopColor="#9f1239" />
+                        </radialGradient>
+                      </defs>
+                      <path
+                        d="M24 40 C14 30 6 22 6 15 C6 9 10 5 16 5 C20 5 23 8 24 10 C25 8 28 5 32 5 C38 5 42 9 42 15 C42 22 34 30 24 40 Z"
+                        fill="url(#heartGuideGrad)"
+                        stroke="#ffe4e6"
+                        strokeWidth="1.2"
+                      />
+                      <ellipse cx="16" cy="12" rx="4" ry="2.5" fill="#ffffff" opacity="0.6" transform="rotate(-30 16 12)" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <strong className="text-rose-400 flex items-center gap-1">
+                      <span>3. Trái Tim Hồng Ngọc</span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-950 text-rose-300">+30 HP/viên</span>
+                    </strong>
+                    <p className="text-stone-400 mt-0.5 leading-snug text-[10.5px]">
+                      Hồi phục trực tiếp thanh <strong>Máu (HP - thanh màu đỏ)</strong> trên đỉnh giao diện chiến đấu. Trần Lãm hồi thêm +30% máu.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="p-2.5 bg-stone-950 rounded-xl border border-stone-800">
-                  <strong className="text-sky-400 block">4. ☯️ Ngọc Âm Dương (Nộ Khí Mana):</strong>
-                  <p className="text-stone-400 mt-0.5 leading-snug">
-                    Tích tụ Nộ khí (+15 Mana mỗi viên) làm đầy thanh xanh lam để khai triển <strong>Tuyệt Kỹ Nộ 3D</strong> hủy diệt.
-                  </p>
+                {/* 4. BÁNH CHƯNG XANH */}
+                <div className="p-2.5 bg-stone-950 rounded-xl border border-stone-800 flex gap-2.5 items-start hover:border-emerald-700/60 transition">
+                  <div className="w-10 h-10 rounded-lg bg-stone-900 border border-emerald-900/60 flex items-center justify-center shadow shrink-0">
+                    <svg viewBox="0 0 48 48" className="w-7 h-7 drop-shadow">
+                      <rect x="8" y="8" width="32" height="32" rx="4" fill="#15803d" stroke="#166534" strokeWidth="1.5" />
+                      <rect x="11" y="11" width="26" height="26" rx="2" fill="#22c55e" opacity="0.8" />
+                      <line x1="8" y1="24" x2="40" y2="24" stroke="#fef08a" strokeWidth="2.5" />
+                      <line x1="24" y1="8" x2="24" y2="40" stroke="#fef08a" strokeWidth="2.5" />
+                      <line x1="12" y1="12" x2="36" y2="36" stroke="#fef08a" strokeWidth="1.5" strokeDasharray="3,2" />
+                      <line x1="36" y1="12" x2="12" y2="36" stroke="#fef08a" strokeWidth="1.5" strokeDasharray="3,2" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <strong className="text-emerald-400 flex items-center gap-1">
+                      <span>4. Bánh Chưng Xanh</span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300">+16 Giáp/viên</span>
+                    </strong>
+                    <p className="text-stone-400 mt-0.5 leading-snug text-[10.5px]">
+                      Gia tăng thanh <strong>Hộ Giáp (DEF - thanh màu xanh lá)</strong>, tối đa 160 Giáp. Giáp nhận đòn đỡ sát thương trước khi trừ vào Máu.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="p-2.5 bg-stone-950 rounded-xl border border-yellow-700/60">
-                  <strong className="text-yellow-400 block">5. 🪙 Thỏi Vàng Hoàng Kim (Quân Lương):</strong>
-                  <p className="text-stone-300 mt-0.5 leading-snug">
-                    Thu thập tiền vàng (+10 Vàng mỗi viên) cộng dồn vào ngân khố sau trận để sắm thần binh, giáp trụ trong Quân Nhu.
-                  </p>
+                {/* 5. NGỌC ÂM DƯƠNG */}
+                <div className="p-2.5 bg-stone-950 rounded-xl border border-stone-800 flex gap-2.5 items-start hover:border-sky-700/60 transition">
+                  <div className="w-10 h-10 rounded-lg bg-stone-900 border border-sky-900/60 flex items-center justify-center shadow shrink-0">
+                    <svg viewBox="0 0 48 48" className="w-7 h-7 drop-shadow">
+                      <circle cx="24" cy="24" r="18" fill="#3b82f6" stroke="#60a5fa" strokeWidth="1.2" />
+                      <path d="M24 6 A18 18 0 0 0 24 42 A9 9 0 0 1 24 24 A9 9 0 0 0 24 6 Z" fill="#ef4444" />
+                      <circle cx="24" cy="15" r="3.5" fill="#3b82f6" />
+                      <circle cx="24" cy="33" r="3.5" fill="#ef4444" />
+                      <circle cx="24" cy="24" r="18" fill="none" stroke="#dbeafe" strokeWidth="1.2" opacity="0.6" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <strong className="text-sky-400 flex items-center gap-1">
+                      <span>5. Ngọc Âm Dương Thái Cực</span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-sky-950 text-sky-300">+15 Mana/viên</span>
+                    </strong>
+                    <p className="text-stone-400 mt-0.5 leading-snug text-[10.5px]">
+                      Tích lũy Nộ Khí làm đầy thanh <strong>Mana (thanh màu xanh lam)</strong>. Khi đạt 100% nộ, nút <strong>TUYỆT KỸ NỘ 3D</strong> sáng rực để thi triển!
+                    </p>
+                  </div>
                 </div>
 
-                <div className="p-2.5 bg-purple-950/50 rounded-xl border border-purple-500/80 shadow">
-                  <strong className="text-purple-300 block">6. 🍇 Túi Gấm Linh Đan Tím (Cực Phẩm Đa Dụng):</strong>
-                  <p className="text-stone-200 mt-0.5 leading-snug">
-                    Vật phẩm màu tím viền vàng giúp <strong>Hồi kép cả Máu (+18 HP) + Nộ khí (+8 Mana)</strong> và <strong>tăng nhẹ Công lực (+2 ATK cộng dồn ngay trong trận)</strong>!
-                  </p>
+                {/* 6. THỎI VÀNG HOÀNG KIM */}
+                <div className="p-2.5 bg-stone-950 rounded-xl border border-yellow-800/60 flex gap-2.5 items-start hover:border-yellow-600 transition">
+                  <div className="w-10 h-10 rounded-lg bg-stone-900 border border-yellow-700/60 flex items-center justify-center shadow shrink-0">
+                    <svg viewBox="0 0 48 48" className="w-7 h-7 drop-shadow">
+                      <defs>
+                        <linearGradient id="goldGuideGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                          <stop offset="0%" stopColor="#fef08a" />
+                          <stop offset="50%" stopColor="#eab308" />
+                          <stop offset="100%" stopColor="#a16207" />
+                        </linearGradient>
+                      </defs>
+                      <ellipse cx="24" cy="20" rx="14" ry="7" fill="#facc15" stroke="#ca8a04" strokeWidth="1" />
+                      <path
+                        d="M10 20 C10 32 16 38 24 38 C32 38 38 32 38 20 C36 28 30 32 24 32 C18 32 12 28 10 20 Z"
+                        fill="url(#goldGuideGrad)"
+                        stroke="#ca8a04"
+                        strokeWidth="1.2"
+                      />
+                      <circle cx="24" cy="20" r="5" fill="#fef08a" opacity="0.9" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <strong className="text-yellow-400 flex items-center gap-1">
+                      <span>6. Thỏi Vàng Hoàng Kim</span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-yellow-950 text-yellow-300">+10 Vàng/viên</span>
+                    </strong>
+                    <p className="text-stone-300 mt-0.5 leading-snug text-[10.5px]">
+                      Thu thập ngân lượng cộng thẳng vào ngân khố sau trận đấu. Dùng để rèn thần binh, đúc khiên giáp trong <strong>Quân Nhu</strong>.
+                    </p>
+                  </div>
+                </div>
+
+                {/* 7. TÚI GẤM LINH ĐAN TÍM */}
+                <div className="p-2.5 bg-purple-950/40 rounded-xl border border-purple-600/70 flex gap-2.5 items-start shadow hover:border-purple-400 transition">
+                  <div className="w-10 h-10 rounded-lg bg-stone-900 border border-purple-700/60 flex items-center justify-center shadow shrink-0">
+                    <svg viewBox="0 0 48 48" className="w-7 h-7 drop-shadow">
+                      <path
+                        d="M24 14 C16 14 12 22 12 30 C12 36 17 40 24 40 C31 40 36 36 36 30 C36 22 32 14 24 14 Z"
+                        fill="#8b5cf6"
+                        stroke="#a78bfa"
+                        strokeWidth="1.2"
+                      />
+                      <path d="M19 12 L29 12 L31 8 L17 8 Z" fill="#7c3aed" stroke="#6d28d9" strokeWidth="1" />
+                      <ellipse cx="24" cy="14" rx="7" ry="2.5" fill="#facc15" />
+                      <circle cx="24" cy="14" r="2.5" fill="#dc2626" />
+                      <circle cx="24" cy="27" r="4" fill="#c084fc" opacity="0.6" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <strong className="text-purple-300 flex items-center gap-1">
+                      <span>7. Túi Gấm Linh Đan Tím</span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-900 text-purple-200">Thần Dược Tam Hiệu</span>
+                    </strong>
+                    <p className="text-stone-200 mt-0.5 leading-snug text-[10.5px]">
+                      Cực phẩm hồi phục toàn diện: <strong>+18 HP (Máu)</strong>, <strong>+8 Mana (Nộ)</strong> và <strong>+2 ATK Công lực</strong> cộng dồn vĩnh viễn suốt trận!
+                    </p>
+                  </div>
+                </div>
+
+                {/* 8. NGỌC BOM NỔ 4 Ô */}
+                <div className="p-2.5 bg-amber-950/40 rounded-xl border border-orange-500/80 flex gap-2.5 items-start shadow hover:border-orange-400 transition">
+                  <div className="relative w-10 h-10 rounded-lg bg-stone-900 border border-orange-500 flex items-center justify-center shadow shrink-0">
+                    <div className="w-6 h-6 rounded-full bg-gradient-to-r from-yellow-400 via-orange-500 to-red-600 animate-pulse flex items-center justify-center text-xs shadow">
+                      💣
+                    </div>
+                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[9px] font-bold text-white shadow ring-1 ring-white">
+                      4
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <strong className="text-orange-300 flex items-center gap-1">
+                      <span>8. Ngọc Bom Nổ (BOMB_4)</span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-orange-950 text-orange-200">Nổ Lan 3x3</span>
+                    </strong>
+                    <p className="text-stone-300 mt-0.5 leading-snug text-[10.5px]">
+                      Tạo ra khi ăn 4 ô cùng loại. Khi kích nổ sẽ <strong>phá hủy vùng 3x3 (9 ô xung quanh)</strong>, thu hoạch toàn bộ tài nguyên và kích hoạt nổ dây chuyền!
+                    </p>
+                  </div>
+                </div>
+
+                {/* 9. NGỌC SẤM SÉT 5 Ô */}
+                <div className="p-2.5 bg-cyan-950/40 rounded-xl border border-cyan-400/80 flex gap-2.5 items-start shadow hover:border-cyan-300 transition sm:col-span-2">
+                  <div className="relative w-10 h-10 rounded-lg bg-stone-900 border border-cyan-400 flex items-center justify-center shadow shadow-cyan-500/40 shrink-0">
+                    <div className="w-6 h-6 rounded-full bg-gradient-to-r from-cyan-400 to-yellow-300 animate-pulse flex items-center justify-center text-xs shadow">
+                      ⚡
+                    </div>
+                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-yellow-400 text-[9px] font-bold text-stone-950 shadow ring-1 ring-white">
+                      5+
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <strong className="text-cyan-300 flex items-center gap-1">
+                      <span>9. Ngọc Sấm Sét Tối Thượng (LIGHTNING_5)</span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-900 text-yellow-300">Quét Chữ Thập &amp; Toàn Bàn</span>
+                    </strong>
+                    <p className="text-stone-200 mt-0.5 leading-snug text-[10.5px]">
+                      Tạo ra khi ăn từ 5 đến 6 ô trở lên. Khi kích hoạt sẽ <strong>phóng tia điện quang quét sạch toàn bộ hàng ngang + hàng dọc</strong> hoặc <strong>quét sạch toàn bộ một loại ngọc trên cả bàn cờ</strong>, mang lại sức mạnh hủy diệt cực lớn!
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Linh thú, Tốc độ SPD & Nút Xin Hàng */}
-            <div className="p-2.5 bg-stone-950 rounded-xl border border-amber-900/60 space-y-1 text-[11px]">
-              <div className="flex items-center gap-1.5 font-bold text-amber-300">
-                <Shield className="w-3.5 h-3.5 shrink-0" />
-                <span>Tốc Độ (SPD), Linh Thú 3D &amp; Nút Hàng (🏳️):</span>
+            {/* 4. HỆ THỐNG 3 THANH CHỈ SỐ, TỐC ĐỘ SPD & QUY ĐỊNH THI ĐẤU */}
+            <div className="p-3 bg-stone-950 rounded-xl border border-amber-900/70 space-y-2 text-[11px]">
+              <div className="flex items-center gap-1.5 font-bold text-amber-300 text-xs">
+                <Shield className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>HỆ THỐNG 3 THANH CHỈ SỐ &amp; LUẬT THI ĐẤU ĐỐI KHÁNG:</span>
               </div>
-              <p className="text-stone-300 leading-relaxed">
-                • Tướng có chỉ số <strong>SPD cao hơn sẽ được quyền đánh trước ở Lượt 1</strong> và tăng tỷ lệ bạo kích.
-                <br />
-                • Khi đang giao chiến, nếu muốn rút lui nhanh về bản đồ để nâng cấp trang bị, bạn có thể nhấn nút <strong>🏳️ Hàng</strong> ngay trên thanh tiêu đề đỉnh màn hình.
-              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[10.5px] pt-1">
+                <div className="p-2 bg-stone-900/90 rounded-lg border border-red-900/60">
+                  <span className="font-bold text-red-400 block mb-0.5">❤️ Thanh Máu (HP)</span>
+                  <span className="text-stone-300 leading-snug block">
+                    Sinh mệnh của danh tướng. Khi máu về 0 trận đấu kết thúc ngay lập tức. Hồi phục qua Trái Tim và Linh Đan.
+                  </span>
+                </div>
+
+                <div className="p-2 bg-stone-900/90 rounded-lg border border-emerald-900/60">
+                  <span className="font-bold text-emerald-400 block mb-0.5">🛡️ Thanh Giáp (DEF)</span>
+                  <span className="text-stone-300 leading-snug block">
+                    Giáp trụ phòng thủ (tối đa 160). Hấp thụ sát thương kiếm trước khi chạm vào máu. Hồi phục qua Bánh Chưng Xanh.
+                  </span>
+                </div>
+
+                <div className="p-2 bg-stone-900/90 rounded-lg border border-sky-900/60">
+                  <span className="font-bold text-sky-400 block mb-0.5">⚡ Thanh Nộ (Mana)</span>
+                  <span className="text-stone-300 leading-snug block">
+                    Năng lượng thần công. Tích lũy qua Ngọc Âm Dương &amp; Linh Đan. Khi đầy 100% sẽ mở khóa nút Tuyệt Kỹ Nộ 3D.
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-1.5 border-t border-stone-800 space-y-1 text-stone-300 text-[10.5px] leading-relaxed">
+                <p>
+                  • <strong>Tốc Độ (SPD) Ra Tay Trước:</strong> Tướng nào có chỉ số <strong>SPD cao hơn sẽ được đi trước ở Lượt 1</strong>. Chênh lệch SPD càng lớn thì tỷ lệ ra đòn Bạo Kích (Chí Mạng) càng cao.
+                </p>
+                <p>
+                  • <strong>Đồng Hồ Đếm Giờ Lượt Đánh:</strong> Mỗi lượt đi có đồng hồ giới hạn (10s, 15s, 20s, 30s hoặc Vô hạn). Trong chế độ Đấu Mạng / Bluetooth (P2P), <strong>duy nhất Chủ Phòng (Host)</strong> có quyền cài đặt thời gian thi đấu để đảm bảo tính công bằng.
+                </p>
+                <p>
+                  • <strong>Rút Lui / Xin Hàng (🏳️):</strong> Bạn có thể nhấn nút <strong>🏳️ Hàng</strong> trên thanh tiêu đề góc trên để rút lui chiến thuật nhanh về bản đồ nâng cấp mà không bị treo trận.
+                </p>
+              </div>
             </div>
           </div>
         </div>
