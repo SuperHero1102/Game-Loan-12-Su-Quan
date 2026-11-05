@@ -24,6 +24,7 @@ import { HeroInfoModal } from './components/character/HeroInfoModal';
 import { CoronationModal } from './components/campaign/CoronationModal';
 import { StoryChronicleModal } from './components/campaign/StoryChronicleModal';
 import { UpdateNotificationToast } from './components/common/UpdateNotificationToast';
+import { IOSInstallPrompt } from './components/pwa/IOSInstallPrompt';
 
 class GameErrorBoundary extends React.Component<
   { children: React.ReactNode; onRecover: () => void },
@@ -619,6 +620,9 @@ export default function App() {
               onSelectStageToFight={handleSelectStageFromChronicle}
             />
           )}
+
+          {/* Hướng dẫn Thêm vào Màn hình chính cho iPhone Safari */}
+          <IOSInstallPrompt />
         </GameErrorBoundary>
       </div>
     </main>

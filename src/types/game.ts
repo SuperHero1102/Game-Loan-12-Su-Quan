@@ -2,30 +2,34 @@
  * Loạn 12 Sứ Quân — Type Definitions
  */
 
-export type TileType = 
-  | 'SWORD'      // Đoản kiếm (bạc hoặc Huyết Kiếm đỏ thẫm)
-  | 'HEART'      // Trái tim - Hồi phục sinh lực (Máu Đỏ)
-  | 'GOLD'       // Thỏi vàng - Tích lũy tiền vàng
-  | 'CHUNG_CAKE' // Bánh chưng xanh - Tăng giáp phòng ngự (Giáp Xanh Lá)
-  | 'YIN_YANG'   // Ngọc Thái Cực / Âm Dương - Tích nộ khí (Mana Xanh Lam)
-  | 'ELIXIR';    // Tiên dược - Tăng năng lượng / dược liệu
+export type GameScreen =
+  | 'TITLE'
+  | 'WORLD_MAP'
+  | 'STAGE_SELECT'
+  | 'ROADMAP'
+  | 'BATTLE'
+  | 'PVE_SELECT'
+  | 'PVP_LOBBY';
 
-export type SpecialTileType = 'NORMAL' | 'BOMB_4' | 'LIGHTNING_5' | 'CROSS_BURST';
+export type GameMode =
+  | 'CAMPAIGN'
+  | 'PVE'
+  | 'PVE_CUSTOM'
+  | 'PVP_LOCAL'
+  | 'PVP_HOTSEAT'
+  | 'PVP_P2P';
 
-export type WeaponVisualType =
-  | 'imperial_sword'    // Kiếm lệnh Hoàng Đế (Đinh Bộ Lĩnh)
-  | 'bronze_spear'      // Trường thương đồng thau (Ngô Xương Xí)
-  | 'great_saber'       // Đại trảm đao (Đỗ Cảnh Thạc)
-  | 'iron_mace'         // Thiết chùy phá thành (Nguyễn Siêu)
-  | 'divine_bow'        // Thần cung tiễn đồng (Kiều Công Hãn)
-  | 'steel_pike'        // Trường giáo đầu thép (Nguyễn Khoan)
-  | 'twin_blades'       // Song đoản kiếm (Kiều Thuận)
-  | 'battle_axe'        // Rìu chiến song diện (Lý Khuê)
-  | 'dragon_sword'      // Kim kiếm khảm vân rồng (Ngô Nhật Khánh)
-  | 'twin_halberds'     // Song kích song hành (Phạm Bạch Hổ)
-  | 'command_sword'     // Bảo kiếm chỉ huy & Soái kỳ (Trần Lãm)
-  | 'lance_shield'      // Thiết mâu & Khiên gai (Lữ Đường)
-  | 'zhanmadao';        // Đại đao trảm mã (Nguyễn Thủ Tiệp)
+export type PveDifficulty = 'EASY' | 'MEDIUM' | 'HARD' | 'HELL';
+
+export type TileType =
+  | 'SWORD'
+  | 'HEART'
+  | 'GOLD'
+  | 'CHUNG_CAKE'
+  | 'YIN_YANG'
+  | 'ELIXIR';
+
+export type SpecialTileType = 'NORMAL' | 'BOMB_4' | 'LIGHTNING_5';
 
 export interface Tile {
   id: string;
@@ -33,23 +37,36 @@ export interface Tile {
   special: SpecialTileType;
   row: number;
   col: number;
-  isBloodSword?: boolean; // Huyết Kiếm Đỏ Thẫm (Sát thương x2 & Xuyên 50% giáp)
-  isMatched?: boolean;
+  isBloodSword?: boolean;
   isNew?: boolean;
 }
+
+export type WeaponVisualType =
+  | 'imperial_sword'
+  | 'bronze_spear'
+  | 'command_sword'
+  | 'great_saber'
+  | 'twin_halberds'
+  | 'iron_mace'
+  | 'lance_shield'
+  | 'battle_axe'
+  | 'dragon_sword'
+  | 'twin_blades'
+  | 'zhanmadao'
+  | 'steel_pike'
+  | 'divine_bow';
 
 export interface Warlord {
   id: string;
   name: string;
   title: string;
   territory: string;
-  shortTerritory?: string; // Tên ngắn trên cờ bản đồ 3D (VD: Tam Đái, Đường Lâm)
-  stageNumber: number; // Thứ tự ải từ 1 đến 12
+  shortTerritory: string;
+  stageNumber: number;
   baseHp: number;
   baseArmor: number;
   baseAtk: number;
   baseDef: number;
-  // Bảng thuộc tính chuẩn 13 vị tướng (Thang điểm 100)
   role: string;
   hpRating: number;
   atkRating: number;
@@ -60,17 +77,17 @@ export interface Warlord {
   weaponVisual: WeaponVisualType;
   passiveName: string;
   passiveDescription: string;
-  portrait3D?: string; // Ảnh 3D chân thực từ /assets/aistudio/...
+  portrait3D: string;
   sceneBackdrop: string;
-  crestType?: 'imperial_crown' | 'general_helm' | 'royal_cap' | 'tiger_helm' | 'seal';
+  crestType: string;
   avatarColor: string;
   avatarEmoji: string;
-  characterVisual: 'hero' | 'warlord_bearded' | 'warlord_fierce' | 'warlord_masked' | 'warlord_elder';
+  characterVisual: string;
   quote: string;
   skillName: string;
   skillDescription: string;
-  skillCost: number; // Mana cost (100)
-  aiAggressiveness: number; // 0 to 1
+  skillCost: number;
+  aiAggressiveness?: number;
 }
 
 export interface FighterState {
@@ -79,82 +96,46 @@ export interface FighterState {
   title: string;
   avatarEmoji: string;
   avatarColor: string;
-  characterVisual: 'hero' | 'warlord_bearded' | 'warlord_fierce' | 'warlord_masked' | 'warlord_elder';
-  hp: number;         // 1. MÁU ĐỎ
+  characterVisual: string;
+  hp: number;
   maxHp: number;
-  armor: number;      // 2. GIÁP XANH LÁ (BÁNH CHƯNG)
+  armor: number;
   maxArmor: number;
-  mana: number;       // 3. KHÍ LỰC / MANA XANH LAM (ÂM DƯƠNG)
+  mana: number;
   maxMana: number;
   atk: number;
   def: number;
-  spd: number;        // 4. TỐC ĐỘ (Quyết định lượt đầu & bạo kích)
+  spd: number;
   role: string;
   mountName: string;
   weaponName: string;
   weaponVisual: WeaponVisualType;
   passiveName: string;
   passiveDescription: string;
-  portrait3D?: string;
+  portrait3D: string;
   skillName: string;
   skillDescription: string;
   skillCost: number;
   isPlayer: boolean;
-  status: 'idle' | 'attacking' | 'hurt' | 'heal' | 'shield' | 'mana' | 'skill' | 'victory' | 'defeat';
+  status:
+    | 'idle'
+    | 'attacking'
+    | 'hit'
+    | 'hurt'
+    | 'heal'
+    | 'shield'
+    | 'mana'
+    | 'skill'
+    | 'victory'
+    | 'defeat';
   goldEarnedThisMatch: number;
 }
 
 export interface FloatingText {
   id: string;
   text: string;
-  type: 'damage' | 'heal' | 'armor' | 'gold' | 'crit' | 'extra_turn' | 'skill';
+  type: 'damage' | 'heal' | 'armor' | 'skill' | 'extra_turn' | 'crit' | 'gold';
   target: 'p1' | 'p2';
-}
-
-export type GameScreen = 
-  | 'TITLE'
-  | 'WORLD_MAP'
-  | 'STAGE_SELECT' // Danh sách 12 ải trực quan
-  | 'ROADMAP'      // Phân đoạn hành quân 3D trước trận đấu
-  | 'PVE_SELECT'   // Đấu với máy chọn 4 cấp độ
-  | 'BATTLE'
-  | 'PVP_LOBBY'
-  | 'SHOP'
-  | 'HERO_INFO';
-
-export type GameMode = 
-  | 'CAMPAIGN'
-  | 'PVE_CUSTOM'
-  | 'PVP_HOTSEAT'
-  | 'PVP_P2P';
-
-export type PveDifficulty = 'EASY' | 'MEDIUM' | 'HARD' | 'HELL';
-
-export interface MapNode {
-  id: string;
-  name: string;
-  shortName?: string;
-  stageNumber?: number;
-  warlordId: string;
-  x: number;
-  y: number;
-  neighbors: string[];
-  isCapital?: boolean;
-  description: string;
-  goldReward?: number;
-}
-
-export interface WorldVillageEvent {
-  id: string;
-  name: string;
-  type: 'VILLAGE' | 'SUPPLY_CAMP' | 'WATCHTOWER' | 'BANDIT_CAMP';
-  x: number;
-  y: number;
-  description: string;
-  rewardGold: number;
-  rewardHpBonus: number;
-  rewardAtkBonus: number;
-  visited: boolean;
 }
 
 export interface Item {
@@ -169,6 +150,11 @@ export interface Item {
   iconName: string;
 }
 
+export interface InventoryItem {
+  itemId: string;
+  count: number;
+}
+
 export interface PlayerProfile {
   name: string;
   level: number;
@@ -181,13 +167,47 @@ export interface PlayerProfile {
   baseDef: number;
   equippedWeaponId: string | null;
   equippedArmorId: string | null;
-  inventory: { itemId: string; count: number }[];
+  inventory: InventoryItem[];
   currentNodeId: string;
-  currentStageNumber: number; // Ải cao nhất đã mở
+  currentStageNumber: number;
   defeatedWarlords: string[];
   lives: number;
-  hasCompletedCampaign?: boolean; // Đã thống nhất 12 sứ quân
-  coronationViewed?: boolean;     // Đã chứng kiến Đại Lễ Đăng Quang
-  prestigeLevel?: number;         // Cấp độ Tái Lập Giang Sơn New Game+ (0 = lần 1, 1 = Vương Triều I, ...)
-  unlockedEmperorSkin?: boolean;  // Đã mở khóa Hoàng Đế Đinh Tiên Hoàng Long Bào 3D
+  hasCompletedCampaign: boolean;
+  coronationViewed: boolean;
+  prestigeLevel: number;
+  unlockedEmperorSkin: boolean;
+}
+
+export interface MapNode {
+  id: string;
+  name: string;
+  shortName: string;
+  stageNumber: number;
+  warlordId: string;
+  x: number;
+  y: number;
+  neighbors: string[];
+  isCapital?: boolean;
+  description: string;
+  goldReward: number;
+}
+
+export interface WorldVillageEvent {
+  id: string;
+  name: string;
+  type:
+    | 'VILLAGE'
+    | 'BLACKSMITH'
+    | 'TEMPLE'
+    | 'MARKET'
+    | 'WATCHTOWER'
+    | 'BANDIT_CAMP'
+    | 'SUPPLY_CAMP';
+  x: number;
+  y: number;
+  description: string;
+  rewardGold: number;
+  rewardHpBonus: number;
+  rewardAtkBonus: number;
+  visited: boolean;
 }

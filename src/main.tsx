@@ -2,9 +2,11 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 import { deviceOptimizer } from './services/deviceOptimizer';
+import { offlineStorage } from './services/offlineStorage';
 
 // Khởi chạy tự động nhận diện dòng điện thoại Android/iOS & tối ưu hiển thị ngầm
 deviceOptimizer.initSilentOptimization();
+void offlineStorage.initStoragePersistence();
 
 const ACTIVE_CACHE_NAME = 'loan-12-su-quan-v9.2';
 
@@ -48,7 +50,7 @@ async function warmOfflineCache() {
       origin + '/index.html',
       origin + '/legacy-bundle.css',
       origin + '/legacy-bundle.js',
-      origin + '/manifest.webmanifest',
+      origin + '/manifest.json',
       origin + '/apple-touch-icon.png',
       origin + '/app-logo.png',
       origin + '/campaign_map.png',
@@ -56,17 +58,14 @@ async function warmOfflineCache() {
       origin + '/assets/aistudio/IMG_2711_a7aea1e8.png',
       origin + '/assets/aistudio/image_e32a7cc1.png',
       origin + '/assets/aistudio/IMG_2715_e22f2946.png',
-      origin + '/assets/aistudio/image_16246c8b.png',
       origin + '/assets/aistudio/IMG_2714_0b96c8eb.png',
       origin + '/assets/aistudio/image_ce7ec614.png',
       origin + '/assets/aistudio/IMG_2713_a4589fa9.png',
       origin + '/assets/aistudio/image_f02fa1cb.png',
-      origin + '/assets/aistudio/IMG_2712_34b6309d.png',
       origin + '/assets/aistudio/image_b4dad4bb.png',
       origin + '/assets/aistudio/IMG_2716_ea79d901.png',
       origin + '/assets/aistudio/image_711ab021.png',
       origin + '/assets/aistudio/image_805b66e6.png',
-      origin + '/assets/aistudio/image_53c4514a.png',
       origin + '/assets/aistudio/image_598e8894.png',
       origin + '/assets/aistudio/image_da41c035.png',
       origin + '/assets/aistudio/image_db1edde4.png',
@@ -115,7 +114,7 @@ function scheduleBackgroundWarmup() {
   const run = () => {
     void warmOfflineCache();
   };
-  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+  if (typeof window === 'undefined' && 'requestIdleCallback' in window) {
     (window as any).requestIdleCallback(run, { timeout: 2000 });
   } else {
     setTimeout(run, 600);
@@ -146,4 +145,3 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       });
   });
 }
-

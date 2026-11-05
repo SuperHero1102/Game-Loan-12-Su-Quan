@@ -6,6 +6,7 @@ import { lobbySignalingPlugin } from './scripts/lobbyPlugin';
 
 export default defineConfig(() => {
   return {
+    base: './',
     plugins: [react(), tailwindcss(), lobbySignalingPlugin()],
     resolve: {
       dedupe: ['react', 'react-dom'],
